@@ -1407,7 +1407,8 @@ export default function ApiDocumentation() {
       id: "mobile-functions-by-user",
       method: "GET",
       path: "/api/auth/mobile-functions-by-user",
-      description: "Retourne les fonctions mobiles du rôle de l'utilisateur connecté",
+      description:
+        "Retourne les fonctions mobiles du rôle de l'utilisateur connecté",
       requestExample: `GET /api/auth/mobile-functions-by-user\nAuthorization: Bearer <token>`,
       responseExample: [
         {
@@ -1467,7 +1468,7 @@ export default function ApiDocumentation() {
     (ep) =>
       ep.category === activeCategory &&
       (ep.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ep.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        ep.description.toLowerCase().includes(searchTerm.toLowerCase())),
   );
 
   const toggleEndpoint = (id: string) => {
@@ -1592,7 +1593,7 @@ export default function ApiDocumentation() {
                   Documentation API
                 </h1>
                 <p className="mt-1 text-sm md:text-base opacity-90">
-                  Liste des services nkezefuu
+                  Liste des endpoints(services) nkezefuu
                 </p>
               </div>
             </div>
@@ -1682,12 +1683,12 @@ export default function ApiDocumentation() {
                         endpoint.method === "GET"
                           ? "bg-green-100 text-green-800"
                           : endpoint.method === "POST"
-                          ? "bg-blue-100 text-blue-800"
-                          : endpoint.method === "PUT"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : endpoint.method === "DELETE"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-gray-100 text-gray-800"
+                            ? "bg-blue-100 text-blue-800"
+                            : endpoint.method === "PUT"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : endpoint.method === "DELETE"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-gray-100 text-gray-800"
                       }`}
                     >
                       {endpoint.method}
