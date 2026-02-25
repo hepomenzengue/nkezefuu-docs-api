@@ -5,7 +5,7 @@ import Image from "next/image";
 
 // 1. Define all response types
 type BaseResponse = {
-  status: number;
+  status?: number;
   customstatus?: number;
   error?: string;
   message?: string;
@@ -44,6 +44,11 @@ type MemberResponse = BaseResponse & {
   actual_balance?: number;
   amount_pending_charges?: number;
   amount_pending_recipes?: number;
+  amount_actions?: number;
+  investment_amounts?: {
+    amount_invested?: number;
+    amount_to_receive?: number;
+  };
 };
 
 type TransactionResponse = BaseResponse & {
@@ -65,6 +70,7 @@ type ChargesResponse = BaseResponse & {
     name?: string;
     amount?: number;
     can_be_manually_paid?: boolean;
+    is_assurance_fees_manual_payment_readonly?: boolean;
     manual_payment?: boolean;
     is_overdue?: boolean;
     is_overdue_payment_before: boolean;
@@ -477,6 +483,11 @@ export default function ApiDocumentation() {
           actual_balance: 1500.5,
           amount_pending_charges: 200.0,
           amount_pending_recipes: 300.0,
+          amount_actions: 450.0,
+          investment_amounts: {
+            amount_invested: 1000.0,
+            amount_to_receive: 1150.0,
+          },
         } as MemberResponse,
         {
           status: 200,
@@ -568,6 +579,7 @@ export default function ApiDocumentation() {
               name: "Facture électricité",
               amount: 120.5,
               can_be_manually_paid: true,
+              is_assurance_fees_manual_payment_readonly: false,
               manual_payment: true,
               is_overdue_payment_before: true,
               is_overdue_payment_in_seven_days: false,
@@ -632,7 +644,17 @@ export default function ApiDocumentation() {
         {
           status: 200,
           customstatus: 404,
-          error: "paiement à mettre à jour est introuvable",
+          error: "Paiement à mettre à jour introuvable",
+        } as BaseResponse,
+        {
+          status: 200,
+          customstatus: 400,
+          error: "Paiement manuel en lecture seule",
+        } as BaseResponse,
+        {
+          status: 200,
+          customstatus: 400,
+          error: "Format JSON invalide",
         } as BaseResponse,
         {
           status: 200,
@@ -671,8 +693,8 @@ export default function ApiDocumentation() {
         } as BaseResponse,
         {
           status: 200,
-          customstatus: 404,
-          error: "paiement à mettre à jour est introuvable",
+          customstatus: 400,
+          error: "Format JSON invalide",
         } as BaseResponse,
         {
           status: 200,
@@ -768,11 +790,10 @@ export default function ApiDocumentation() {
           customstatus: 404,
           error: "Membre introuvable",
         } as BaseResponse,
-
         {
           status: 200,
-          customstatus: 401,
-          error: "Mot de passe incorrect",
+          customstatus: 400,
+          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
@@ -791,8 +812,8 @@ export default function ApiDocumentation() {
           error: "Erreur survenue lors du paiment partiel",
         } as BaseResponse,
         {
-          status: 500,
-          customstatus: 500,
+          status: 200,
+          customstatus: 400,
           error: "Une erreur inconnue s'est produite lors du paiement",
         } as BaseResponse,
       ],
@@ -931,11 +952,10 @@ export default function ApiDocumentation() {
           customstatus: 404,
           error: "Membre introuvable",
         } as BaseResponse,
-
         {
           status: 200,
-          customstatus: 401,
-          error: "Mot de passe incorrect",
+          customstatus: 400,
+          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
@@ -979,9 +999,9 @@ export default function ApiDocumentation() {
           error: "Quantité maximale à vendre dépassée",
         } as BaseResponse,
         {
-          status: 500,
-          customstatus: 500,
-          error: "Une erreur inconnue s'est produite lors du paiement",
+          status: 200,
+          customstatus: 400,
+          error: "Une erreur inconnue s'est produite lors de la mise en vente",
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1087,11 +1107,10 @@ export default function ApiDocumentation() {
           customstatus: 404,
           error: "Membre introuvable",
         } as BaseResponse,
-
         {
           status: 200,
-          customstatus: 401,
-          error: "Mot de passe incorrect",
+          customstatus: 400,
+          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
@@ -1120,9 +1139,9 @@ export default function ApiDocumentation() {
           error: "Quantité maximale à vendre dépassée",
         } as BaseResponse,
         {
-          status: 500,
-          customstatus: 500,
-          error: "Une erreur inconnue s'est produite lors du paiement",
+          status: 200,
+          customstatus: 400,
+          error: "Une erreur inconnue s'est produite lors de la mise en vente",
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1155,11 +1174,10 @@ export default function ApiDocumentation() {
           customstatus: 404,
           error: "Membre introuvable",
         } as BaseResponse,
-
         {
           status: 200,
-          customstatus: 401,
-          error: "Mot de passe incorrect",
+          customstatus: 400,
+          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
@@ -1173,9 +1191,9 @@ export default function ApiDocumentation() {
           error: "Action en vente  introuvable",
         } as BaseResponse,
         {
-          status: 500,
-          customstatus: 500,
-          error: "Une erreur inconnue s'est produite lors du paiement",
+          status: 200,
+          customstatus: 400,
+          error: "Une erreur inconnue s'est produite lors de la mise en vente",
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1245,11 +1263,10 @@ export default function ApiDocumentation() {
           customstatus: 404,
           error: "Membre introuvable",
         } as BaseResponse,
-
         {
           status: 200,
-          customstatus: 401,
-          error: "Mot de passe incorrect",
+          customstatus: 400,
+          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
@@ -1296,9 +1313,9 @@ export default function ApiDocumentation() {
         } as BaseResponse,
 
         {
-          status: 500,
-          customstatus: 500,
-          error: "Une erreur inconnue s'est produite lors du paiement",
+          status: 200,
+          customstatus: 400,
+          error: "Une erreur inconnue s'est produite lors de la mise en vente",
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1318,7 +1335,8 @@ export default function ApiDocumentation() {
               id: 1,
               code: "dashboard",
               description: "Tableau de bord",
-              color_code: "#4f46e5",
+              color_code_light: "#4f46e5",
+              color_code_dark: "#312e81",
             },
           ],
         } as BaseResponse,
@@ -1355,7 +1373,8 @@ export default function ApiDocumentation() {
               id: 1,
               code: "dashboard",
               description: "Tableau de bord",
-              color_code: "#4f46e5",
+              color_code_light: "#4f46e5",
+              color_code_dark: "#312e81",
               allowed_roles: [
                 {
                   id: 2,
@@ -1404,7 +1423,8 @@ export default function ApiDocumentation() {
               id: 1,
               code: "dashboard",
               description: "Tableau de bord",
-              color_code: "#4f46e5",
+              color_code_light: "#4f46e5",
+              color_code_dark: "#312e81",
             },
           ],
         } as BaseResponse,
