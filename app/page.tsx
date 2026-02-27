@@ -125,6 +125,7 @@ type Categories = {
   actions_investments: Category;
   actions_market: Category;
   mobile: Category;
+  referenced_members: Category;
 };
 
 export default function ApiDocumentation() {
@@ -176,6 +177,10 @@ export default function ApiDocumentation() {
     mobile: {
       name: "Accès Mobile",
       description: "Fonctions mobiles et rôles autorisés",
+    },
+    referenced_members: {
+      name: "Membres référencés",
+      description: "Liste des membres regroupés par référent",
     },
   };
 
@@ -946,6 +951,46 @@ export default function ApiDocumentation() {
       ],
       category: "payments",
     },
+    {
+      id: "referenced-members-list",
+      method: "GET",
+      path: "/api/auth/referenced-members-list",
+      description: "Liste des membres classés par référent",
+      requestExample: `GET /api/auth/referenced-members-list\nAuthorization: Bearer <token>`,
+      responseExample: [
+        {
+          members: [
+            {
+              id: 5,
+              name: "Referent Exemple",
+              referenced_members: [
+                {
+                  name: "Membre A",
+                  actual_balance: 25000,
+                  type: "Membre actif",
+                  status: "Actif",
+                },
+              ],
+              referenced_members_count: 1,
+            },
+          ],
+          count: 1,
+          status: 200,
+          customstatus: 200,
+        } as BaseResponse,
+        {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Erreur serveur",
+          status: 500,
+          customstatus: 500,
+        } as BaseResponse,
+      ],
+      category: "referenced_members",
+    },
     //  Actions & investments Endpoints
     {
       id: "member-actions",
@@ -1645,6 +1690,8 @@ export default function ApiDocumentation() {
         return "execute le reglement d'une charge, en total ou partiel selon le solde disponible du membre.";
       case "member-avalised-payments":
         return "retourne les paiements en attente dans lesquels le membre connecte intervient comme avaliste.";
+      case "referenced-members-list":
+        return "retourne les membres regroupes par referent, avec le detail des membres references.";
       case "member-actions":
         return "retourne le portefeuille d'actions du membre avec quantites, valeurs et etat de mise en vente.";
       case "member-investments":
