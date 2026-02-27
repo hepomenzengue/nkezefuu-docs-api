@@ -51,6 +51,7 @@ type MemberResponse = BaseResponse & {
     amount_to_receive?: number;
   };
   total_avalised_payments_amount?: number;
+  total_projects_treasury_forecast?: number;
 };
 
 type TransactionResponse = BaseResponse & {
@@ -126,6 +127,7 @@ type Categories = {
   actions_market: Category;
   mobile: Category;
   referenced_members: Category;
+  project_treasury: Category;
 };
 
 export default function ApiDocumentation() {
@@ -181,6 +183,10 @@ export default function ApiDocumentation() {
     referenced_members: {
       name: "Membres référencés",
       description: "Liste des membres regroupés par référent",
+    },
+    project_treasury: {
+      name: "Prévision Trésorerie",
+      description: "Prévisions de trésorerie des projets",
     },
   };
 
@@ -495,6 +501,7 @@ export default function ApiDocumentation() {
           },
           total_due_charges_amount: 125.0,
           total_avalised_payments_amount: 85000.0,
+          total_projects_treasury_forecast: 420000.0,
           status: 200,
           customstatus: 200,
         } as MemberResponse,
@@ -990,6 +997,40 @@ export default function ApiDocumentation() {
         } as BaseResponse,
       ],
       category: "referenced_members",
+    },
+    {
+      id: "project-treasury-forecast-list",
+      method: "GET",
+      path: "/api/auth/project-treasury-forecast-list",
+      description: "Liste des prévisions de trésorerie par projet",
+      requestExample: `GET /api/auth/project-treasury-forecast-list\nAuthorization: Bearer <token>`,
+      responseExample: [
+        {
+          projects: [
+            {
+              project_code: "PRJ-001",
+              project_description: "Projet Assurance",
+              actual_balance: 2500000,
+              charges_to_pay_end_next_month: 400000,
+              treasury_forecast: 2100000,
+            },
+          ],
+          count: 1,
+          status: 200,
+          customstatus: 200,
+        } as BaseResponse,
+        {
+          error: "Token invalide ou expire",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Erreur serveur",
+          status: 500,
+          customstatus: 500,
+        } as BaseResponse,
+      ],
+      category: "project_treasury",
     },
     //  Actions & investments Endpoints
     {
@@ -1692,6 +1733,8 @@ export default function ApiDocumentation() {
         return "retourne les paiements en attente dans lesquels le membre connecte intervient comme avaliste.";
       case "referenced-members-list":
         return "retourne les membres regroupes par referent, avec le detail des membres references.";
+      case "project-treasury-forecast-list":
+        return "retourne la prevision de tresorerie par projet avec le solde actuel et les charges a payer.";
       case "member-actions":
         return "retourne le portefeuille d'actions du membre avec quantites, valeurs et etat de mise en vente.";
       case "member-investments":
