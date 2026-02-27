@@ -50,6 +50,7 @@ type MemberResponse = BaseResponse & {
     amount_invested?: number;
     amount_to_receive?: number;
   };
+  total_avalised_payments_amount?: number;
 };
 
 type TransactionResponse = BaseResponse & {
@@ -488,6 +489,7 @@ export default function ApiDocumentation() {
             amount_to_receive: 1150.0,
           },
           total_due_charges_amount: 125.0,
+          total_avalised_payments_amount: 85000.0,
           status: 200,
           customstatus: 200,
         } as MemberResponse,
@@ -894,6 +896,52 @@ export default function ApiDocumentation() {
           error: "Une erreur inconnue s'est produite lors du paiement",
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+      ],
+      category: "payments",
+    },
+    {
+      id: "member-avalised-payments",
+      method: "GET",
+      path: "/api/auth/member-avalised-payments",
+      description:
+        "Liste des paiements pour lesquels le membre connecté est avaliste",
+      requestExample: `GET /api/auth/member-avalised-payments\nAuthorization: Bearer <token>`,
+      responseExample: [
+        {
+          avalised_payments: [
+            {
+              id: 81,
+              initial_date: "2026-02-01",
+              new_date: "2026-02-15",
+              partner: "Membre Exemple",
+              description: "Echéance avalisée",
+              amount: 150000,
+            },
+          ],
+          count: 1,
+          status: 200,
+          customstatus: 200,
+        } as BaseResponse,
+        {
+          error: "Authentification requise",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
+          status: 200,
+          customstatus: 404,
+        } as BaseResponse,
+        {
+          error: "Erreur serveur",
+          status: 500,
+          customstatus: 500,
         } as BaseResponse,
       ],
       category: "payments",
@@ -1595,6 +1643,8 @@ export default function ApiDocumentation() {
         return "retourne les recettes/entrees d'argent en attente pour le membre.";
       case "pay-line":
         return "execute le reglement d'une charge, en total ou partiel selon le solde disponible du membre.";
+      case "member-avalised-payments":
+        return "retourne les paiements en attente dans lesquels le membre connecte intervient comme avaliste.";
       case "member-actions":
         return "retourne le portefeuille d'actions du membre avec quantites, valeurs et etat de mise en vente.";
       case "member-investments":
