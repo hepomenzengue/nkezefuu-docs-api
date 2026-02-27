@@ -43,6 +43,7 @@ type MemberResponse = BaseResponse & {
   creation_date?: string;
   actual_balance?: number;
   amount_pending_charges?: number;
+  total_due_charges_amount?: number;
   amount_pending_recipes?: number;
   amount_actions?: number;
   investment_amounts?: {
@@ -150,8 +151,8 @@ export default function ApiDocumentation() {
       description: "Historique des opérations financières",
     },
     charges: {
-      name: "Charges",
-      description: "Charges du membre",
+      name: "Charges à payer",
+      description: "Charges du membre et listes d'échéances",
     },
     recipes: {
       name: "Recettes",
@@ -188,7 +189,6 @@ export default function ApiDocumentation() {
       requestExample: `POST /api/auth/login\nContent-Type: application/json\n\n{\n  "login": "email@exemple.com",\n  "password": "votre_mot_de_passe"\n}`,
       responseExample: [
         {
-          status: 200,
           token: "eyJhbGciOi...",
           user_id: 1,
           expires_in: 900,
@@ -197,30 +197,31 @@ export default function ApiDocumentation() {
             code: "manager",
             description: "Responsable mobile",
           },
+          status: 200,
         } as AuthResponse,
         {
-          status: 400,
           error: "Utilisateur introuvable",
-        } as BaseResponse,
-        {
           status: 400,
+        } as BaseResponse,
+        {
           error: "Membre introuvable",
+          status: 400,
         } as BaseResponse,
         {
-          status: 401,
           error: "Mot de passe incorrect",
+          status: 401,
         } as BaseResponse,
         {
-          status: 500,
           error: "Échec de la génération du token",
-        } as BaseResponse,
-        {
           status: 500,
-          error: "Configuration role mobile indisponible",
         } as BaseResponse,
         {
-          status: 403,
+          error: "Configuration role mobile indisponible",
+          status: 500,
+        } as BaseResponse,
+        {
           error: "Role mobile introuvable",
+          status: 403,
         } as BaseResponse,
       ],
       category: "authentication",
@@ -257,43 +258,43 @@ export default function ApiDocumentation() {
       requestExample: `POST /api/auth/update-password\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "old_password": "ancien_mdp",\n  "new_password": "nouveau_mdp"\n}`,
       responseExample: [
         {
+          message: "Mot de passe mis à jour",
           status: 200,
           customstatus: 200,
-          message: "Mot de passe mis à jour",
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
+        } as BaseResponse,
+        {
           error: "Token invalide ou expiré",
-        } as BaseResponse,
-        {
-          status: 200,
-          customstatus: 400,
-          error: "Les deux mots de passe sont requis",
-        } as BaseResponse,
-        {
-          status: 200,
-          customstatus: 400,
-          error: "Ancien et nouveau mot de passe identiques",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Mot de passe actuel incorrect",
         } as BaseResponse,
         {
+          error: "Les deux mots de passe sont requis",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Ancien et nouveau mot de passe identiques",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Mot de passe actuel incorrect",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Utilisateur introuvable",
           status: 200,
           customstatus: 404,
-          error: "Utilisateur introuvable",
         } as BaseResponse,
         {
-          status: 500,
           error: "Erreur serveur",
+          status: 500,
         } as BaseResponse,
       ],
       category: "password",
@@ -315,8 +316,8 @@ export default function ApiDocumentation() {
           remaining: 180,
         } as PasswordResetResponse,
         {
-          status: 400,
           error: "Utilisateur introuvable",
+          status: 400,
         } as BaseResponse,
         {
           status: 429,
@@ -326,8 +327,8 @@ export default function ApiDocumentation() {
           email: "email@exemple.com",
         } as PasswordResetResponse,
         {
-          status: 500,
           error: "Erreur lors de l'envoi du mail",
+          status: 500,
         } as BaseResponse,
       ],
       category: "password",
@@ -346,16 +347,16 @@ export default function ApiDocumentation() {
           name: "Nom Utilisateur",
         } as PasswordResetResponse,
         {
-          status: 400,
           error: "Utilisateur introuvable",
-        } as BaseResponse,
-        {
           status: 400,
-          error: "Code invalide ou expiré",
         } as BaseResponse,
         {
-          status: 500,
+          error: "Code invalide ou expiré",
+          status: 400,
+        } as BaseResponse,
+        {
           error: "Erreur interne du serveur",
+          status: 500,
         } as BaseResponse,
       ],
       category: "password",
@@ -372,16 +373,16 @@ export default function ApiDocumentation() {
           message: "Mot de passe mis à jour avec succès",
         } as BaseResponse,
         {
-          status: 400,
           error: "Code invalide ou expiré",
-        } as BaseResponse,
-        {
           status: 400,
-          error: "Utilisateur introuvable",
         } as BaseResponse,
         {
-          status: 500,
+          error: "Utilisateur introuvable",
+          status: 400,
+        } as BaseResponse,
+        {
           error: "Erreur interne du serveur",
+          status: 500,
         } as BaseResponse,
       ],
       category: "password",
@@ -396,8 +397,6 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/member-info\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           name: "Nom du membre",
           email: "email@exemple.com",
           member_type: "Type de membre",
@@ -409,26 +408,28 @@ export default function ApiDocumentation() {
             description: "Responsable mobile",
           },
           creation_date: "01/01/2023",
+          status: 200,
+          customstatus: 200,
         } as MemberResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "member",
@@ -441,30 +442,30 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/home-member-info\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           name: "Nom du membre",
           actual_balance: 1500.5,
+          status: 200,
+          customstatus: 200,
         } as MemberResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "member",
@@ -478,8 +479,6 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/member-balances\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           actual_balance: 1500.5,
           amount_pending_charges: 200.0,
           amount_pending_recipes: 300.0,
@@ -488,26 +487,29 @@ export default function ApiDocumentation() {
             amount_invested: 1000.0,
             amount_to_receive: 1150.0,
           },
+          total_due_charges_amount: 125.0,
+          status: 200,
+          customstatus: 200,
         } as MemberResponse,
         {
+          error: "Authentification requise",
           status: 200,
           customstatus: 401,
-          error: "Authentification requise",
         } as BaseResponse,
         {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "member",
@@ -536,25 +538,25 @@ export default function ApiDocumentation() {
           ],
         } as TransactionResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
 
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "transactions",
@@ -569,8 +571,6 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/member-charges\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           pending_charges: [
             {
               id: 1,
@@ -589,27 +589,29 @@ export default function ApiDocumentation() {
             },
           ],
           manual_payment: false,
+          status: 200,
+          customstatus: 200,
         } as ChargesResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
 
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "charges",
@@ -622,44 +624,44 @@ export default function ApiDocumentation() {
       requestExample: `POST /api/auth/update-line-payment-mode\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "line_id": 123\n}`,
       responseExample: [
         {
+          message: "Mode de paiement mis à jour",
           status: 200,
           customstatus: 200,
-          message: "Mode de paiement mis à jour",
         } as PaymentsResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
+        } as BaseResponse,
+        {
           error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 404,
           error: "Membre introuvable",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 404,
+        } as BaseResponse,
+        {
           error: "Paiement à mettre à jour introuvable",
+          status: 200,
+          customstatus: 404,
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 400,
           error: "Paiement manuel en lecture seule",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Format JSON invalide",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Une erreur inconnue s'est produite lors de la mise à jour",
+          status: 200,
+          customstatus: 400,
         } as BaseResponse,
       ],
       category: "charges",
@@ -672,34 +674,111 @@ export default function ApiDocumentation() {
       requestExample: `POST /api/auth/update-all-lines-payment-mode\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{}`,
       responseExample: [
         {
+          message: "Mode de paiement mis à jour",
           status: 200,
           customstatus: 200,
-          message: "Mode de paiement mis à jour",
         } as PaymentsResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 400,
           error: "Format JSON invalide",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Une erreur inconnue s'est produite lors de la mise à jour",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+      ],
+      category: "charges",
+    },
+    {
+      id: "due-charges-list",
+      method: "GET",
+      path: "/api/auth/due-charges-list",
+      description: "Synthèse globale des charges échues",
+      requestExample: `GET /api/auth/due-charges-list\nAuthorization: Bearer <token>`,
+      responseExample: [
+        {
+          due_charges: [
+            {
+              id: 12,
+              entity_name: "Projet Assurance 2026",
+              entity_type: "Projet",
+              amount_total: 3500000,
+            },
+          ],
+          count: 1,
+          status: 200,
+          customstatus: 200,
+        } as BaseResponse,
+        {
+          error: "Authentification requise",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Erreur serveur",
+          status: 500,
+          customstatus: 500,
+        } as BaseResponse,
+      ],
+      category: "charges",
+    },
+    {
+      id: "user-due-charges-list",
+      method: "GET",
+      path: "/api/auth/user-due-charges-list",
+      description: "Détail des charges échues d'un partenaire",
+      requestExample: `GET /api/auth/user-due-charges-list\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "summary_id": 12\n}\n\nou\n\n{\n  "partner_id": 45\n}`,
+      responseExample: [
+        {
+          due_charges: [
+            {
+              id: 875,
+              formatted_date: "20/02/2026",
+              name: "Échéance cotisation",
+              partner_linked_line_name: "NKEZEFUU MEMBER",
+              debit: 150000,
+            },
+          ],
+          count: 1,
+          status: 200,
+          customstatus: 200,
+        } as BaseResponse,
+        {
+          error: "Configuration manquante",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Ligne de synthèse introuvable",
+          status: 200,
+          customstatus: 404,
+        } as BaseResponse,
+        {
+          error: "Paramètre requis: summary_id ou partner_id",
+          status: 200,
+          customstatus: 400,
         } as BaseResponse,
       ],
       category: "charges",
@@ -729,25 +808,25 @@ export default function ApiDocumentation() {
           ],
         } as ChargesResponse, // Reusing ChargesResponse as structure is similar
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
 
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "recipes",
@@ -763,58 +842,58 @@ export default function ApiDocumentation() {
       requestExample: `POST /api/auth/pay-line\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "line_id": 123\n}`,
       responseExample: [
         {
+          message: "Paiement effectué avec succès",
           status: 200,
           customstatus: 200,
-          message: "Paiement effectué avec succès",
         } as PaymentsResponse,
         {
-          status: 200,
-          customstatus: 200,
           message: "Paiement partiel effectué avec succès",
           paid_amount: 35000,
           remaining_amount: 55000,
+          status: 200,
+          customstatus: 200,
         } as PaymentsResponse,
 
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
+          error: "Format JSON invalide",
           status: 200,
           customstatus: 400,
-          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
+          error: "Paiement à régler introuvable",
           status: 200,
           customstatus: 404,
-          error: "Paiement à régler introuvable",
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 400,
           error: "Solde negatif ou null",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Erreur survenue lors du paiment partiel",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Une erreur inconnue s'est produite lors du paiement",
+          status: 200,
+          customstatus: 400,
         } as BaseResponse,
       ],
       category: "payments",
@@ -828,8 +907,6 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/member-actions\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           actions: [
             {
               project_name: "Projet d'assurances",
@@ -842,27 +919,29 @@ export default function ApiDocumentation() {
               qty_to_sell_max: 60,
             },
           ],
+          status: 200,
+          customstatus: 200,
         } as ChargesResponse, // Reusing ChargesResponse as structure is similar
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
 
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "actions_investments",
@@ -875,8 +954,6 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/member-investments\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           investments: [
             {
               project_name: "Vente des Beignets",
@@ -897,27 +974,29 @@ export default function ApiDocumentation() {
               payment_date: "2025-10-29",
             },
           ],
+          status: 200,
+          customstatus: 200,
         } as ChargesResponse, // Reusing ChargesResponse as structure is similar
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
 
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "actions_investments",
@@ -931,77 +1010,77 @@ export default function ApiDocumentation() {
       requestExample: `POST /api/auth/sell-action\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "action_id": 66,\n  "unit_sale_price": 15000,\n  "qty_to_sell": 10\n}`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           message: "Mise en vente d'actions réalisée avec succès",
           unit_sale_price: 15000,
           qty_to_sell: 10,
+          status: 200,
+          customstatus: 200,
         } as PaymentsResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
+          error: "Format JSON invalide",
           status: 200,
           customstatus: 400,
-          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
-          status: 200,
-          customstatus: 400,
           error: "Action à vendre recquis",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Quantité à vendre recquise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Quantité à vendre négative ou nulle",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Prix unitaire de vente recquis",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
-          error: "Prix unitaire négatif ou null",
         } as BaseResponse,
         {
+          error: "Prix unitaire négatif ou null",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Action à vendre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Action à vendre introuvable",
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 400,
           error: "Action déjà en vente à ce prix",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Quantité maximale à vendre dépassée",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Une erreur inconnue s'est produite lors de la mise en vente",
+          status: 200,
+          customstatus: 400,
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1054,25 +1133,25 @@ export default function ApiDocumentation() {
           customstatus: 200,
         } as ChargesResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
 
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1093,55 +1172,55 @@ export default function ApiDocumentation() {
           qty_to_sell: 7,
         } as PaymentsResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
+          error: "Format JSON invalide",
           status: 200,
           customstatus: 400,
-          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
-          status: 200,
-          customstatus: 400,
           error: "Action en vente recquis",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Quantité à ajouter recquise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
-          error: "Quantité à ajouter négative ou nulle",
         } as BaseResponse,
         {
+          error: "Quantité à ajouter négative ou nulle",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Action en vente  introuvable",
           status: 200,
           customstatus: 404,
-          error: "Action en vente  introuvable",
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 400,
           error: "Quantité maximale à vendre dépassée",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Une erreur inconnue s'est produite lors de la mise en vente",
+          status: 200,
+          customstatus: 400,
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1160,40 +1239,40 @@ export default function ApiDocumentation() {
           customstatus: 200,
         },
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expiré",
         } as BaseResponse,
         {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
+          error: "Format JSON invalide",
           status: 200,
           customstatus: 400,
-          error: "Format JSON invalide",
         } as BaseResponse,
 
         {
+          error: "Action en vente recquis",
           status: 200,
           customstatus: 400,
-          error: "Action en vente recquis",
         } as BaseResponse,
         {
+          error: "Action en vente  introuvable",
           status: 200,
           customstatus: 404,
-          error: "Action en vente  introuvable",
         } as BaseResponse,
         {
+          error: "Une erreur inconnue s'est produite lors de la mise en vente",
           status: 200,
           customstatus: 400,
-          error: "Une erreur inconnue s'est produite lors de la mise en vente",
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1206,20 +1285,20 @@ export default function ApiDocumentation() {
       requestExample: `POST /api/auth/reduce-qty-to-sell-action\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "selling_action_id": 66,\n  "qty_to_reduce": 2\n}`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           message: "Réduction de la quantité en vente réalisée",
           qty_to_sell: 8,
+          status: 200,
+          customstatus: 200,
         } as BaseResponse,
         {
+          error: "Vous n'êtes pas autorisé à modifier cette vente",
           status: 200,
           customstatus: 403,
-          error: "Vous n'êtes pas autorisé à modifier cette vente",
         } as BaseResponse,
         {
+          error: "Action en vente introuvable",
           status: 200,
           customstatus: 404,
-          error: "Action en vente introuvable",
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1249,73 +1328,73 @@ export default function ApiDocumentation() {
           qty_to_buy: 5,
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 401,
           error: "Authentification requise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 401,
+        } as BaseResponse,
+        {
           error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 404,
           error: "Membre introuvable",
-        } as BaseResponse,
-        {
-          status: 200,
-          customstatus: 400,
-          error: "Format JSON invalide",
-        } as BaseResponse,
-
-        {
-          status: 200,
-          customstatus: 400,
-          error: "Action ou investissement  en vente recquis",
-        } as BaseResponse,
-        {
-          status: 200,
-          customstatus: 400,
-          error: "Quantité à acheter recquise",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 404,
+        } as BaseResponse,
+        {
+          error: "Format JSON invalide",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+
+        {
+          error: "Action ou investissement  en vente recquis",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Quantité à acheter recquise",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Action ou investissement  en vente  introuvable",
+          status: 200,
+          customstatus: 404,
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 400,
           error: "Quantité à acheter  négative ou nulle",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Solde insuffisant",
+          status: 200,
+          customstatus: 400,
         } as BaseResponse,
 
         {
-          status: 200,
-          customstatus: 400,
           error: "Nombre de parts en vente dépassé",
+          status: 200,
+          customstatus: 400,
         } as BaseResponse,
 
         {
-          status: 200,
-          customstatus: 400,
           error: "Membre propriétaire de l'action",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Nombre d'actions en vente dépassé",
+          status: 200,
+          customstatus: 400,
         } as BaseResponse,
 
         {
+          error: "Une erreur inconnue s'est produite lors de la mise en vente",
           status: 200,
           customstatus: 400,
-          error: "Une erreur inconnue s'est produite lors de la mise en vente",
         } as BaseResponse,
       ],
       category: "actions_market",
@@ -1328,8 +1407,6 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/mobile-functions\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           mobile_functions: [
             {
               id: 1,
@@ -1339,21 +1416,23 @@ export default function ApiDocumentation() {
               color_code_dark: "#312e81",
             },
           ],
+          status: 200,
+          customstatus: 200,
         } as BaseResponse,
         {
+          error: "Token invalide ou expire",
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expire",
         } as BaseResponse,
         {
+          error: "Modeles mobile indisponibles",
           status: 200,
           customstatus: 404,
-          error: "Modeles mobile indisponibles",
         } as BaseResponse,
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "mobile",
@@ -1366,8 +1445,6 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/mobile-functions-with-roles\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           mobile_functions: [
             {
               id: 1,
@@ -1384,21 +1461,23 @@ export default function ApiDocumentation() {
               ],
             },
           ],
+          status: 200,
+          customstatus: 200,
         } as BaseResponse,
         {
+          error: "Token invalide ou expire",
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expire",
         } as BaseResponse,
         {
+          error: "Modeles mobile indisponibles",
           status: 200,
           customstatus: 404,
-          error: "Modeles mobile indisponibles",
         } as BaseResponse,
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "mobile",
@@ -1412,8 +1491,6 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/mobile-functions-by-user\nAuthorization: Bearer <token>`,
       responseExample: [
         {
-          status: 200,
-          customstatus: 200,
           role: {
             id: 2,
             code: "manager",
@@ -1428,36 +1505,38 @@ export default function ApiDocumentation() {
               color_code_dark: "#312e81",
             },
           ],
+          status: 200,
+          customstatus: 200,
         } as BaseResponse,
         {
+          error: "Token invalide ou expire",
           status: 200,
           customstatus: 401,
-          error: "Token invalide ou expire",
         } as BaseResponse,
         {
-          status: 200,
-          customstatus: 404,
           error: "Modeles mobile indisponibles",
-        } as BaseResponse,
-        {
           status: 200,
           customstatus: 404,
-          error: "Membre introuvable",
         } as BaseResponse,
         {
+          error: "Membre introuvable",
+          status: 200,
+          customstatus: 404,
+        } as BaseResponse,
+        {
+          error: "Configuration role mobile indisponible",
           status: 200,
           customstatus: 500,
-          error: "Configuration role mobile indisponible",
         } as BaseResponse,
         {
+          error: "Role mobile introuvable",
           status: 200,
           customstatus: 404,
-          error: "Role mobile introuvable",
         } as BaseResponse,
         {
+          error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-          error: "Erreur serveur",
         } as BaseResponse,
       ],
       category: "mobile",
@@ -1504,6 +1583,10 @@ export default function ApiDocumentation() {
         return "liste l'historique des ecritures liees au membre pour affichage des mouvements.";
       case "member-charges":
         return "retourne les charges a payer du membre avec indicateurs d'echeance et paiement manuel.";
+      case "due-charges-list":
+        return "retourne la synthese des charges echues pour tous les projets et membres.";
+      case "user-due-charges-list":
+        return "retourne le detail des lignes echues d'un partenaire cible via summary_id ou partner_id.";
       case "update-payment-mode":
         return "active ou desactive le mode de paiement manuel pour une charge precise.";
       case "update-all-payment-modes":
