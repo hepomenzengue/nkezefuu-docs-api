@@ -70,6 +70,7 @@ type ChargesResponse = BaseResponse & {
     id?: number;
     formatted_date?: string;
     date?: string;
+    new_date?: string;
     name?: string;
     amount?: number;
     can_be_manually_paid?: boolean;
@@ -414,6 +415,7 @@ export default function ApiDocumentation() {
           member_type: "Type de membre",
           member_type_code: "active_member",
           member_status: "Statut",
+          member_type_chips_color: "#ffffff",
           mobile_role: {
             id: 2,
             code: "manager",
@@ -546,7 +548,6 @@ export default function ApiDocumentation() {
               date: "2023-01-01",
               name: "Libellé transaction",
               amount: 100.5,
-              partner_name: "Partenaire",
               partner_linked_line_name: "",
             },
           ],
@@ -590,6 +591,7 @@ export default function ApiDocumentation() {
               id: 1,
               formatted_date: "01 Jan 2023",
               date: "2023-01-01",
+              new_date: "2026-03-05",
               name: "Facture électricité",
               amount: 120.5,
               can_be_manually_paid: true,
@@ -598,7 +600,6 @@ export default function ApiDocumentation() {
               is_overdue_payment_before: true,
               is_overdue_payment_in_seven_days: false,
               is_overdue_payment_after_seven_days: false,
-              partner_name: "TAMO Bernard",
               partner_linked_line_name: "AMANDJA Leslie",
             },
           ],
@@ -816,7 +817,6 @@ export default function ApiDocumentation() {
               date: "2023-01-01",
               name: "Remboursement",
               amount: 50.0,
-              partner_name: "ASSONFACK ELONG Prisca",
               partner_linked_line_name: "AMANDJA Leslie",
             },
           ],
@@ -966,6 +966,7 @@ export default function ApiDocumentation() {
       requestExample: `GET /api/auth/referenced-members-list\nAuthorization: Bearer <token>`,
       responseExample: [
         {
+          total_referencers_count: 1,
           members: [
             {
               id: 5,
@@ -976,12 +977,47 @@ export default function ApiDocumentation() {
                   actual_balance: 25000,
                   type: "Membre actif",
                   status: "Actif",
+                  status_color: "#ffffff",
                 },
               ],
               referenced_members_count: 1,
             },
           ],
           count: 1,
+          status: 200,
+          customstatus: 200,
+        } as BaseResponse,
+        {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Erreur serveur",
+          status: 500,
+          customstatus: 500,
+        } as BaseResponse,
+      ],
+      category: "referenced_members",
+    },
+    {
+      id: "member-referenced-members-list",
+      method: "GET",
+      path: "/api/auth/member-referenced-members-list",
+      description: "Liste des membres référencés de l'utilisateur connecté",
+      requestExample: `GET /api/auth/member-referenced-members-list\nAuthorization: Bearer <token>`,
+      responseExample: [
+        {
+          referenced_members: [
+            {
+              name: "TEMKENG ZAMBOU Arielle",
+              actual_balance: 408825.0,
+              type: "Coopérateur",
+              status: "Défaillant",
+              status_color: "#DC2626",
+            },
+          ],
+          referenced_members_count: 1,
           status: 200,
           customstatus: 200,
         } as BaseResponse,
@@ -1207,6 +1243,21 @@ export default function ApiDocumentation() {
           customstatus: 400,
         } as BaseResponse,
         {
+          error:
+            "Vous ne pouvez pas vendre des actions car vous êtes de type invité",
+          member_type: "INVITE",
+          member_type_code: "guest",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error:
+            "La vente des actions n'est pas autorisé pour ce projet (autoriserVenteAction=False)",
+          allow_action_sale: false,
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
           error: "Quantité maximale à vendre dépassée",
           status: 200,
           customstatus: 400,
@@ -1228,6 +1279,9 @@ export default function ApiDocumentation() {
       responseExample: [
         {
           actual_balance: 150000.0,
+          total_actions_sale_amount: 0.0,
+          total_investments_sale_amount: 3750000.0,
+          total_global_sale_amount: 3750000.0,
           selling_list: [
             {
               selling_action_id: 40,
