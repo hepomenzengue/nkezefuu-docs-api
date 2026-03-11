@@ -240,6 +240,87 @@ export default function ApiDocumentation() {
       category: "authentication",
     },
     {
+      id: "create-member",
+      method: "POST",
+      path: "/api/create-member",
+      description: "Crée un membre avec un compte utilisateur associé",
+      requestExample: `POST /api/create-member\nContent-Type: application/json\n\n{\n  "member_name": "NOM PRENOM",\n  "email": "membre@exemple.com",\n  "password": "MotDePasse123",\n  "adhesion_year": 2026\n}`,
+      responseExample: [
+        {
+          message: "Membre créé avec succès",
+          member_id: 145,
+          member_code: "NKZ-2026-0145",
+          member_type_code: "guest",
+          member_status_code: "defaulting",
+          status: 200,
+          customstatus: 200,
+        } as BaseResponse,
+        {
+          error: "Format JSON invalide",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Paramètre(s) manquant(s): adhesion_year",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "L'année d'adhésion doit être un entier.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "L'année d'adhésion configurée est invalide.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "L'année d'adhésion ne correspond pas au paramétrage en vigueur.",
+          expected_adhesion_year: 2026,
+          received_adhesion_year: 2025,
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le mot de passe est invalide.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le mot de passe doit contenir au moins 8 caractères.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le rôle mobile par défaut de l'API n'est pas configuré.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le rôle mobile par défaut de l'API est invalide.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le rôle mobile par défaut configuré est introuvable.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le compte utilisateur lié au membre n'a pas pu être créé.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Erreur serveur",
+          status: 500,
+          customstatus: 500,
+        } as BaseResponse,
+      ],
+      category: "authentication",
+    },
+    {
       id: "auth-refresh",
       method: "POST",
       path: "/api/auth/refresh",
@@ -1756,6 +1837,8 @@ export default function ApiDocumentation() {
     switch (endpoint.id) {
       case "auth-login":
         return "ouvre la session mobile, verifie le compte, puis retourne le token JWT et le role mobile du membre.";
+      case "create-member":
+        return "cree un membre (type guest par defaut) avec son utilisateur et son mot de passe, selon l'annee d'adhesion configuree.";
       case "auth-refresh":
         return "renouvelle un token existant en desactivant l'ancien pour prolonger la session utilisateur.";
       case "update-password":
