@@ -29,6 +29,17 @@ type PasswordResetResponse = BaseResponse & {
   code?: string;
 };
 
+type SignupResponse = BaseResponse & {
+  email?: string;
+  remaining?: number;
+  member_id?: number;
+  member_code?: string;
+  member_type_code?: string;
+  member_status_code?: string;
+  expected_adhesion_year?: number;
+  received_adhesion_year?: number;
+};
+
 type MemberResponse = BaseResponse & {
   name?: string;
   email?: string;
@@ -94,6 +105,7 @@ type PaymentsResponse = BaseResponse & {
 type EndpointResponse =
   | AuthResponse
   | PasswordResetResponse
+  | SignupResponse
   | MemberResponse
   | TransactionResponse
   | ChargesResponse
@@ -117,6 +129,7 @@ type Category = {
 };
 
 type Categories = {
+  signup: Category;
   authentication: Category;
   password: Category;
   member: Category;
@@ -133,12 +146,16 @@ type Categories = {
 
 export default function ApiDocumentation() {
   const [activeCategory, setActiveCategory] =
-    useState<keyof Categories>("authentication");
+    useState<keyof Categories>("signup");
   const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
 
   // Categories definition
   const categories: Categories = {
+    signup: {
+      name: "Inscription",
+      description: "Verification d'email et creation de compte membre",
+    },
     authentication: {
       name: "Authentification",
       description: "Endpoints pour la gestion des connexions et tokens",
@@ -193,6 +210,169 @@ export default function ApiDocumentation() {
 
   // All endpoints with complete typing
   const allEndpoints: Endpoint[] = [
+    // Signup Endpoints
+    {
+      id: "signup-request-code",
+      method: "POST",
+      path: "/api/signup/request-code",
+      description: "Envoie un code de verification pour demarrer l'inscription",
+      requestExample: `POST /api/signup/request-code\nContent-Type: application/json\n\n{\n  "email": "email@exemple.com"\n}`,
+      responseExample: [
+        {
+          status: 200,
+          message: "Code envoyé par email",
+          email: "email@exemple.com",
+          remaining: 180,
+        } as SignupResponse,
+        {
+          error: "L'email est requis",
+          status: 400,
+        } as BaseResponse,
+        {
+          error: "Un compte existe déjà avec cet email",
+          status: 400,
+        } as BaseResponse,
+        {
+          status: 429,
+          message: "Un code a déjà été envoyé",
+          remaining: 120,
+          email: "email@exemple.com",
+        } as SignupResponse,
+        {
+          error:
+            "Le serveur d'envoi d'email n'est pas configuré. Veuillez configurer un serveur SMTP avec un FROM Filter dans Paramètres → Technique → Serveurs d'emails sortants.",
+          status: 503,
+        } as BaseResponse,
+        {
+          error: "Erreur interne du serveur",
+          status: 500,
+        } as BaseResponse,
+      ],
+      category: "signup",
+    },
+    {
+      id: "signup-verify-code",
+      method: "POST",
+      path: "/api/signup/verify-code",
+      description: "Valide le code recu par email avant la creation du compte",
+      requestExample: `POST /api/signup/verify-code\nContent-Type: application/json\n\n{\n  "email": "email@exemple.com",\n  "code": "123456"\n}`,
+      responseExample: [
+        {
+          status: 200,
+          message: "Email vérifié",
+          email: "email@exemple.com",
+        } as SignupResponse,
+        {
+          error: "L'email et le code sont requis",
+          status: 400,
+        } as BaseResponse,
+        {
+          error: "Code invalide",
+          status: 400,
+        } as BaseResponse,
+        {
+          error: "Code expiré",
+          status: 400,
+        } as BaseResponse,
+        {
+          error: "Erreur interne du serveur",
+          status: 500,
+        } as BaseResponse,
+      ],
+      category: "signup",
+    },
+    {
+      id: "create-member",
+      method: "POST",
+      path: "/api/create-member",
+      description: "Crée un membre avec un compte utilisateur associé",
+      requestExample: `POST /api/create-member\nContent-Type: application/json\n\n{\n  "member_name": "NOM PRENOM",\n  "email": "membre@exemple.com",\n  "password": "MotDePasse123",\n  "adhesion_year": 2026\n}`,
+      responseExample: [
+        {
+          message: "Membre créé avec succès",
+          member_id: 145,
+          member_code: "NKZ-2026-0145",
+          member_type_code: "guest",
+          member_status_code: "defaulting",
+          status: 200,
+          customstatus: 200,
+        } as SignupResponse,
+        {
+          error: "Format JSON invalide",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Paramètre(s) manquant(s): adhesion_year",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "L'année d'adhésion doit être un entier.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "L'année d'adhésion configurée est invalide.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "L'année d'adhésion ne correspond pas au paramétrage en vigueur.",
+          expected_adhesion_year: 2026,
+          received_adhesion_year: 2025,
+          status: 200,
+          customstatus: 400,
+        } as SignupResponse,
+        {
+          error: "Le mot de passe est invalide.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le mot de passe doit contenir au moins 8 caractères.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Email non vérifié. Vérifiez d'abord le code reçu.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le code de vérification est expiré. Demandez un nouveau code.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le rôle mobile par défaut de l'API n'est pas configuré.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le rôle mobile par défaut de l'API est invalide.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le rôle mobile par défaut configuré est introuvable.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Le compte utilisateur lié au membre n'a pas pu être créé.",
+          status: 200,
+          customstatus: 400,
+        } as BaseResponse,
+        {
+          error: "Erreur serveur",
+          status: 500,
+          customstatus: 500,
+        } as BaseResponse,
+      ],
+      category: "signup",
+    },
+
     // Authentication Endpoints
     {
       id: "auth-login",
@@ -240,106 +420,58 @@ export default function ApiDocumentation() {
       category: "authentication",
     },
     {
-      id: "create-member",
+      id: "auth-refresh",
       method: "POST",
-      path: "/api/create-member",
-      description: "Crée un membre avec un compte utilisateur associé",
-      requestExample: `POST /api/create-member\nContent-Type: application/json\n\n{\n  "member_name": "NOM PRENOM",\n  "email": "membre@exemple.com",\n  "password": "MotDePasse123",\n  "adhesion_year": 2026\n}`,
+      path: "/api/auth/refresh",
+      description: "Rafraîchit un token JWT expiré en désactivant l'ancien",
+      requestExample: `POST /api/auth/refresh
+Content-Type: application/json
+
+{
+  "token": "eyJhbGciOi..."
+}`,
       responseExample: [
         {
-          message: "Membre créé avec succès",
-          member_id: 145,
-          member_code: "NKZ-2026-0145",
-          member_type_code: "guest",
-          member_status_code: "defaulting",
+          token: "nouveau_token...",
+          user_id: 1,
+          expires_in: 900,
           status: 200,
           customstatus: 200,
-        } as BaseResponse,
+        } as AuthResponse,
         {
           error: "Format JSON invalide",
           status: 200,
           customstatus: 400,
         } as BaseResponse,
         {
-          error: "Paramètre(s) manquant(s): adhesion_year",
+          error: "Token manquant",
           status: 200,
           customstatus: 400,
         } as BaseResponse,
         {
-          error: "L'année d'adhésion doit être un entier.",
+          error: "Le token n'est pas encore expiré",
           status: 200,
           customstatus: 400,
         } as BaseResponse,
         {
-          error: "L'année d'adhésion configurée est invalide.",
+          error: "Token invalide",
           status: 200,
-          customstatus: 400,
+          customstatus: 401,
         } as BaseResponse,
         {
-          error: "L'année d'adhésion ne correspond pas au paramétrage en vigueur.",
-          expected_adhesion_year: 2026,
-          received_adhesion_year: 2025,
+          error: "Utilisateur introuvable",
           status: 200,
-          customstatus: 400,
+          customstatus: 404,
         } as BaseResponse,
         {
-          error: "Le mot de passe est invalide.",
+          error: "Échec de la génération du token",
           status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le mot de passe doit contenir au moins 8 caractères.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le rôle mobile par défaut de l'API n'est pas configuré.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le rôle mobile par défaut de l'API est invalide.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le rôle mobile par défaut configuré est introuvable.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le compte utilisateur lié au membre n'a pas pu être créé.",
-          status: 200,
-          customstatus: 400,
+          customstatus: 500,
         } as BaseResponse,
         {
           error: "Erreur serveur",
           status: 500,
           customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "authentication",
-    },
-    {
-      id: "auth-refresh",
-      method: "POST",
-      path: "/api/auth/refresh",
-      description: "Rafraîchit un token JWT actif ou expiré",
-      requestExample: `POST /api/auth/refresh\nContent-Type: application/json\n\n{\n  "token": "eyJhbGciOi..."\n}`,
-      responseExample: [
-        {
-          token: "nouveau_token...",
-          user_id: 1,
-          expires_in: 3600,
-        } as AuthResponse,
-        {
-          error: "Token missing",
-        } as BaseResponse,
-        {
-          error: "Invalid token",
-        } as BaseResponse,
-        {
-          error: "Token generation failed",
         } as BaseResponse,
       ],
       category: "authentication",
@@ -420,6 +552,11 @@ export default function ApiDocumentation() {
           username: "Nom Utilisateur",
           email: "email@exemple.com",
         } as PasswordResetResponse,
+        {
+          error:
+            "Le serveur d'envoi d'email n'est pas configuré. Veuillez configurer un serveur SMTP avec un FROM Filter dans Paramètres → Technique → Serveurs d'emails sortants.",
+          status: 503,
+        } as BaseResponse,
         {
           error: "Erreur lors de l'envoi du mail",
           status: 500,
@@ -1835,12 +1972,16 @@ export default function ApiDocumentation() {
 
   const getUsageComment = (endpoint: Endpoint) => {
     switch (endpoint.id) {
+      case "signup-request-code":
+        return "envoie un code OTP d'inscription a l'email saisi, avec limitation de renvoi et verification de la configuration SMTP.";
+      case "signup-verify-code":
+        return "verifie le code OTP d'inscription recu par email avant d'autoriser la creation du compte.";
+      case "create-member":
+        return "finalise l'inscription en creant le membre et l'utilisateur apres verification du code email et de l'annee d'adhesion.";
       case "auth-login":
         return "ouvre la session mobile, verifie le compte, puis retourne le token JWT et le role mobile du membre.";
-      case "create-member":
-        return "cree un membre (type guest par defaut) avec son utilisateur et son mot de passe, selon l'annee d'adhesion configuree.";
       case "auth-refresh":
-        return "renouvelle un token existant en desactivant l'ancien pour prolonger la session utilisateur.";
+        return "renouvelle uniquement un token deja expire en desactivant l'ancien pour prolonger la session utilisateur.";
       case "update-password":
         return "permet a l'utilisateur connecte de changer son mot de passe apres verification de l'ancien.";
       case "reset-request":
