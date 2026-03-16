@@ -318,7 +318,8 @@ export default function ApiDocumentation() {
           customstatus: 400,
         } as BaseResponse,
         {
-          error: "L'année d'adhésion ne correspond pas au paramétrage en vigueur.",
+          error:
+            "L'année d'adhésion ne correspond pas au paramétrage en vigueur.",
           expected_adhesion_year: 2026,
           received_adhesion_year: 2025,
           status: 200,
@@ -340,7 +341,8 @@ export default function ApiDocumentation() {
           customstatus: 400,
         } as BaseResponse,
         {
-          error: "Le code de vérification est expiré. Demandez un nouveau code.",
+          error:
+            "Le code de vérification est expiré. Demandez un nouveau code.",
           status: 200,
           customstatus: 400,
         } as BaseResponse,
@@ -693,57 +695,6 @@ Content-Type: application/json
           error: "Membre introuvable",
           status: 200,
           customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "member",
-    },
-    {
-      id: "member-balances",
-      method: "GET",
-      path: "/api/auth/member-balances",
-      description:
-        "Récupère les données récentes du membre (solde, charges, recettes,actions, investissements...)",
-      requestExample: `GET /api/auth/member-balances\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          actual_balance: 1500.5,
-          amount_pending_charges: 200.0,
-          amount_pending_recipes: 300.0,
-          amount_actions: 450.0,
-          investment_amounts: {
-            amount_invested: 1000.0,
-            amount_to_receive: 1150.0,
-          },
-          total_due_charges_amount: 125.0,
-          total_avalised_payments_amount: 85000.0,
-          total_projects_treasury_forecast: 420000.0,
-          total_actions_sale_amount: 40000.0,
-          total_investments_sale_amount: 40500000.0,
-          total_global_sale_amount: 40540000.0,
-          total_referencers_count: 43,
-          referenced_members_count: 2,
-          status: 200,
-          customstatus: 200,
-        } as MemberResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
         } as BaseResponse,
         {
           error: "Erreur serveur",
@@ -1367,6 +1318,8 @@ Content-Type: application/json
               payment_date: "2025-10-29",
             },
           ],
+          total_amount_invested: 500000,
+          total_amount_to_receive: 1000000,
           status: 200,
           customstatus: 200,
         } as ChargesResponse, // Reusing ChargesResponse as structure is similar
@@ -1909,11 +1862,28 @@ Content-Type: application/json
           },
           mobile_functions: [
             {
-              id: 1,
-              code: "dashboard",
-              description: "Tableau de bord",
-              color_code_light: "#4f46e5",
-              color_code_dark: "#312e81",
+              id: 23,
+              code: "01",
+              description: "Historique",
+              color_code_light: "#000000",
+              color_code_dark: "#ffffff",
+              total: 546630.0,
+            },
+            {
+              id: 24,
+              code: "02",
+              description: "A recevoir",
+              color_code_light: "#000000",
+              color_code_dark: "#ffffff",
+              total: 0.0,
+            },
+            {
+              id: 25,
+              code: "03",
+              description: "A payer",
+              color_code_light: "#000000",
+              color_code_dark: "#ffffff",
+              total: 0.0,
             },
           ],
           status: 200,
