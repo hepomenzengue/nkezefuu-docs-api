@@ -704,6 +704,41 @@ Content-Type: application/json
       ],
       category: "member",
     },
+    {
+      id: "delete-member-account",
+      method: "POST",
+      path: "/api/auth/delete-member-account",
+      description: "Supprime le compte du membre connecté (soft delete : désactive l'accès sans supprimer les données)",
+      requestExample: `POST /api/auth/delete-member-account\nAuthorization: Bearer <token>`,
+      responseExample: [
+        {
+          message: "Compte supprimé avec succès",
+          status: 200,
+          customstatus: 200,
+        } as BaseResponse,
+        {
+          error: "Authentification requise",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Token invalide ou expiré",
+          status: 200,
+          customstatus: 401,
+        } as BaseResponse,
+        {
+          error: "Membre introuvable",
+          status: 200,
+          customstatus: 404,
+        } as BaseResponse,
+        {
+          error: "Erreur serveur",
+          status: 500,
+          customstatus: 500,
+        } as BaseResponse,
+      ],
+      category: "member",
+    },
 
     // Transactions Endpoints
     {
