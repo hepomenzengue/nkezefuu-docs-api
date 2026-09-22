@@ -1,2365 +1,382 @@
 "use client";
-import { useState } from "react";
-import Head from "next/head";
-import Image from "next/image";
+import { useEffect, useState } from "react";
+import Shell, { AsideGroup, AsideItem } from "./components/Shell";
+import { allEndpoints, categories } from "./data";
+import type { Access, CategoryKey, Endpoint, ErrorDoc } from "./data";
 
-// 1. Define all response types
-type BaseResponse = {
-  status?: number;
-  customstatus?: number;
-  error?: string;
-  message?: string;
+const accessLabel: Record<Access, { label: string; help: string }> = {
+  public: { label: "public", help: "Aucun jeton requis" },
+  member: { label: "membre", help: "Tout membre authentifié (jeton Bearer)" },
+  manager: { label: "gestionnaire", help: "Réservé aux gestionnaires nkezefuu et administrateurs" },
+  all: { label: "selon rôle", help: "Tout membre authentifié, comportement différent pour un gestionnaire" },
 };
 
-type AuthResponse = BaseResponse & {
-  token?: string;
-  user_id?: number;
-  expires_in?: number;
-  mobile_role?: {
-    id?: number;
-    code?: string;
-    description?: string;
-  } | null;
+const paramInLabel: Record<string, string> = {
+  path: "chemin",
+  query: "query",
+  body: "corps",
 };
 
-type PasswordResetResponse = BaseResponse & {
-  email?: string;
-  username?: string;
-  remaining?: number;
-  code?: string;
-};
+function Method({ method }: { method: string }) {
+  return (
+    <span
+      className={`font-mono text-xs font-medium tracking-wide shrink-0 px-2 py-0.5 rounded ${
+        method === "GET" ? "bg-get-soft text-get" : "bg-post-soft text-post"
+      }`}
+    >
+      {method}
+    </span>
+  );
+}
 
-type SignupResponse = BaseResponse & {
-  email?: string;
-  remaining?: number;
-  member_id?: number;
-  member_code?: string;
-  member_type_code?: string;
-  member_status_code?: string;
-  expected_adhesion_year?: number;
-  received_adhesion_year?: number;
-};
+function Tag({ children, title }: { children: React.ReactNode; title?: string }) {
+  return (
+    <span title={title} className="font-mono text-[0.68rem] tracking-wide text-accent-ink bg-accent-soft rounded-full px-2 py-px">
+      {children}
+    </span>
+  );
+}
 
-type MemberResponse = BaseResponse & {
-  name?: string;
-  email?: string;
-  member_type?: string;
-  member_type_code?: string;
-  member_status?: string;
-  mobile_role?: {
-    id?: number;
-    code?: string;
-    description?: string;
-  } | null;
-  creation_date?: string;
-  actual_balance?: number;
-  amount_pending_charges?: number;
-  total_due_charges_amount?: number;
-  amount_pending_recipes?: number;
-  amount_actions?: number;
-  investment_amounts?: {
-    amount_invested?: number;
-    amount_to_receive?: number;
-  };
-  total_avalised_payments_amount?: number;
-  total_projects_treasury_forecast?: number;
-};
+function Code({ code }: { code?: number }) {
+  const cls =
+    !code ? "text-faint" : code < 300 ? "text-ok" : code < 500 ? "text-warn" : "text-err";
+  return <span className={`font-mono ${cls}`}>{code ?? "–"}</span>;
+}
 
-type TransactionResponse = BaseResponse & {
-  transaction_lines?: Array<{
-    formatted_date?: string;
-    date?: string;
-    name?: string;
-    amount?: number;
-    partner_name?: string;
-    partner_linked_line_name?: string;
-  }>;
-};
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="label mb-2">{title}</div>
+      {children}
+    </section>
+  );
+}
 
-type ChargesResponse = BaseResponse & {
-  pending_charges?: Array<{
-    id?: number;
-    formatted_date?: string;
-    date?: string;
-    new_date?: string;
-    name?: string;
-    amount?: number;
-    can_be_manually_paid?: boolean;
-    is_assurance_fees_manual_payment_readonly?: boolean;
-    manual_payment?: boolean;
-    is_overdue?: boolean;
-    is_overdue_payment_before: boolean;
-    is_overdue_payment_in_seven_days: boolean;
-    is_overdue_payment_after_seven_days: boolean;
-    partner_name?: string;
-    partner_linked_line_name?: string;
-  }>;
-  manual_payment?: boolean;
-};
+// Meme disclosure native que sur les pages Parcours : l'essentiel reste visible, le
+// detail se deplie a la demande.
+function Disclosure({ label, children, className = "mt-3" }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <details className={`group ${className}`}>
+      <summary className="cursor-pointer select-none text-sm text-muted hover:text-accent inline-flex items-center gap-2 [&::-webkit-details-marker]:hidden">
+        <span className="font-mono text-faint transition-transform group-open:rotate-90" aria-hidden="true">
+          ›
+        </span>
+        {label}
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
 
-type PaymentsResponse = BaseResponse & {
-  line_id?: number;
-  password?: string;
-};
+// Corps JSON d'une erreur, tel qu'il etait affiche avant : le message dans error, puis
+// le ou les codes. Sur une route json-rpc, le code applicatif est result.status et il
+// n'y a pas de customstatus.
+function errorBody(e: ErrorDoc, envelope?: "jsonrpc"): Record<string, unknown> {
+  if (envelope === "jsonrpc") return { error: e.message, status: e.customstatus ?? e.status };
+  return e.customstatus === undefined
+    ? { error: e.message, status: e.status }
+    : { error: e.message, status: e.status, customstatus: e.customstatus };
+}
 
-type EndpointResponse =
-  | AuthResponse
-  | PasswordResetResponse
-  | SignupResponse
-  | MemberResponse
-  | TransactionResponse
-  | ChargesResponse
-  | PaymentsResponse;
+function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; expanded: boolean; onToggle: () => void }) {
+  const access = accessLabel[endpoint.access];
 
-// 2. Define the Endpoint type
-type Endpoint = {
-  id: string;
-  method: string;
-  path: string;
-  description: string;
-  requestExample: string;
-  responseExample: EndpointResponse | EndpointResponse[];
-  category: string;
-};
+  return (
+    <article id={`endpoint-${endpoint.id}`} className="border-t border-rule scroll-mt-6 first:border-t-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="w-full text-left px-4 py-3.5 flex items-start gap-4 hover:bg-gray-50 transition-colors cursor-pointer"
+      >
+        <Method method={endpoint.method} />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <code className="text-sm text-ink break-all">{endpoint.path}</code>
+            <Tag title={access.help}>{access.label}</Tag>
+            {endpoint.envelope === "jsonrpc" && <Tag title="Réponse enveloppée dans { jsonrpc, id, result }">json-rpc</Tag>}
+          </span>
+          <span className="block text-sm text-muted mt-0.5">{endpoint.summary}</span>
+        </span>
+        <span
+          className={`font-mono text-faint text-sm mt-0.5 transition-transform ${expanded ? "rotate-90" : ""}`}
+          aria-hidden="true"
+        >
+          ›
+        </span>
+      </button>
 
-// 3. Define category types
-type Category = {
-  name: string;
-  description: string;
-};
+      {expanded && (
+        <div className="px-4 pb-8 pt-2 space-y-7 bg-gray-50 border-t border-rule">
+          {endpoint.usage && (
+            <p className="text-sm text-ink max-w-prose">
+              <span className="text-muted">Quand l&apos;appeler.</span> {endpoint.usage}
+            </p>
+          )}
 
-type Categories = {
-  signup: Category;
-  authentication: Category;
-  password: Category;
-  member: Category;
-  transactions: Category;
-  charges: Category;
-  recipes: Category;
-  payments: Category;
-  actions_investments: Category;
-  actions_market: Category;
-  mobile: Category;
-  referenced_members: Category;
-  project_treasury: Category;
-};
+          <Section title="Paramètres">
+            {endpoint.params.length === 0 ? (
+              <p className="text-sm text-muted">Aucun paramètre, jeton Bearer uniquement.</p>
+            ) : (
+              <div className="overflow-x-auto bg-surface border border-rule rounded-lg">
+                <table className="ledger">
+                  <thead>
+                    <tr>
+                      <th>Nom</th>
+                      <th>Où</th>
+                      <th>Type</th>
+                      <th>Requis</th>
+                      <th>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {endpoint.params.map((p) => (
+                      <tr key={`${p.in}-${p.name}`}>
+                        <td className="font-mono text-ink whitespace-nowrap">{p.name}</td>
+                        <td className="text-muted whitespace-nowrap">{paramInLabel[p.in]}</td>
+                        <td className="text-muted whitespace-nowrap font-mono text-xs">{p.type}</td>
+                        <td className="whitespace-nowrap">{p.required ? <span className="text-ink">oui</span> : <span className="text-faint">non</span>}</td>
+                        <td className="text-ink">
+                          {p.description}
+                          {p.example !== undefined && (
+                            <span className="block text-xs text-muted mt-1">
+                              ex. <code>{p.example}</code>
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+
+          <div className="grid xl:grid-cols-2 gap-7">
+            <Section title="Requête">
+              <pre className="codeblock">{endpoint.requestExample}</pre>
+            </Section>
+            <Section title={endpoint.success.length > 1 ? "Réponses en cas de succès" : "Réponse en cas de succès"}>
+              <div className="space-y-3">
+                {endpoint.success.map((s, i) => (
+                  <div key={i}>
+                    {s.label && <div className="text-xs text-muted mb-1">{s.label}</div>}
+                    <pre className="codeblock">{JSON.stringify(s.body, null, 2)}</pre>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          </div>
+
+          <Disclosure label={`Champs de la réponse (${endpoint.responseFields.length})`} className="">
+            <div className="overflow-x-auto bg-surface border border-rule rounded-lg">
+              <table className="ledger">
+                <thead>
+                  <tr>
+                    <th>Champ</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {endpoint.responseFields.map((f) => (
+                    <tr key={f.name}>
+                      <td className="font-mono text-xs text-ink">{f.name}</td>
+                      <td className="font-mono text-xs text-muted whitespace-nowrap">{f.type}</td>
+                      <td className="text-ink">{f.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Disclosure>
+
+          <Section title="Erreurs">
+            <div className="space-y-3">
+              {endpoint.errors.map((e, i) => (
+                <div key={i}>
+                  <div className="text-xs text-muted mb-1">
+                    Status: <Code code={e.status} />
+                    {e.customstatus !== undefined && (
+                      <>
+                        {" ("}
+                        <Code code={e.customstatus} />
+                        {")"}
+                      </>
+                    )}
+                  </div>
+                  <pre className="codeblock">{JSON.stringify(errorBody(e, endpoint.envelope), null, 2)}</pre>
+                </div>
+              ))}
+            </div>
+
+            <Disclosure label="Dans quel cas chaque erreur est renvoyée">
+              <div className="overflow-x-auto bg-surface border border-rule rounded-lg">
+                <table className="ledger">
+                  <thead>
+                    <tr>
+                      <th>HTTP</th>
+                      <th>{endpoint.envelope === "jsonrpc" ? "result.status" : "customstatus"}</th>
+                      <th>Message</th>
+                      <th>Quand</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {endpoint.errors.map((e, i) => (
+                      <tr key={i}>
+                        <td>
+                          <Code code={e.status} />
+                        </td>
+                        <td>
+                          <Code code={e.customstatus} />
+                        </td>
+                        <td className="font-mono text-xs text-ink whitespace-pre-wrap">{e.message}</td>
+                        <td className="text-ink">{e.when}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Disclosure>
+          </Section>
+
+          {endpoint.notes && endpoint.notes.length > 0 && (
+            <Section title="À savoir">
+              <ul className="space-y-1.5 text-sm text-ink max-w-prose">
+                {endpoint.notes.map((n, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="text-accent shrink-0" aria-hidden="true">
+                      •
+                    </span>
+                    <span>{n}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
 
 export default function ApiDocumentation() {
-  const [activeCategory, setActiveCategory] =
-    useState<keyof Categories>("signup");
+  const [activeCategory, setActiveCategory] = useState<CategoryKey>("signup");
   const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
 
-  // Categories definition
-  const categories: Categories = {
-    signup: {
-      name: "Inscription",
-      description: "Verification d'email et creation de compte membre",
-    },
-    authentication: {
-      name: "Authentification",
-      description: "Endpoints pour la gestion des connexions et tokens",
-    },
-    password: {
-      name: "Mot de passe",
-      description: "Réinitialisation et modification de mot de passe",
-    },
-    member: {
-      name: "Informations Membre",
-      description: "Données personnelles et solde",
-    },
-    transactions: {
-      name: "Transactions",
-      description: "Historique des opérations financières",
-    },
-    charges: {
-      name: "Charges à payer",
-      description: "Charges du membre et listes d'échéances",
-    },
-    recipes: {
-      name: "Recettes",
-      description: "Recettes du membre",
-    },
-    payments: {
-      name: "Paiements",
-      description: "Opérations de paiement",
-    },
-    actions_investments: {
-      name: "Actions et investissements",
-      description:
-        "Actions et investissements du membre/en vente, Vente et achats",
-    },
-    actions_market: {
-      name: "Marché des actions",
-      description:
-        "Mise en vente d'actions, Achat d'actions et d'investissements",
-    },
-    mobile: {
-      name: "Accès Mobile",
-      description: "Fonctions mobiles et rôles autorisés",
-    },
-    referenced_members: {
-      name: "Membres référencés",
-      description: "Liste des membres regroupés par référent",
-    },
-    project_treasury: {
-      name: "Prévision Trésorerie",
-      description: "Prévisions de trésorerie des projets",
-    },
-  };
+  const term = searchTerm.trim().toLowerCase();
+  const matches = (ep: Endpoint) =>
+    !term ||
+    ep.path.toLowerCase().includes(term) ||
+    ep.summary.toLowerCase().includes(term) ||
+    ep.params.some((p) => p.name.toLowerCase().includes(term)) ||
+    ep.responseFields.some((f) => f.name.toLowerCase().includes(term)) ||
+    ep.errors.some((e) => e.message.toLowerCase().includes(term));
 
-  // All endpoints with complete typing
-  const allEndpoints: Endpoint[] = [
-    // Signup Endpoints
-    {
-      id: "signup-request-code",
-      method: "POST",
-      path: "/api/signup/request-code",
-      description: "Envoie un code de verification pour demarrer l'inscription",
-      requestExample: `POST /api/signup/request-code\nContent-Type: application/json\n\n{\n  "email": "email@exemple.com"\n}`,
-      responseExample: [
-        {
-          status: 200,
-          message: "Code envoyé par email",
-          email: "email@exemple.com",
-          remaining: 180,
-        } as SignupResponse,
-        {
-          error: "L'email est requis",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Un compte existe déjà avec cet email",
-          status: 400,
-        } as BaseResponse,
-        {
-          status: 429,
-          message: "Un code a déjà été envoyé",
-          remaining: 120,
-          email: "email@exemple.com",
-        } as SignupResponse,
-        {
-          error:
-            "Le serveur d'envoi d'email n'est pas configuré. Veuillez configurer un serveur SMTP avec un FROM Filter dans Paramètres → Technique → Serveurs d'emails sortants.",
-          status: 503,
-        } as BaseResponse,
-        {
-          error: "Erreur interne du serveur",
-          status: 500,
-        } as BaseResponse,
-      ],
-      category: "signup",
-    },
-    {
-      id: "signup-verify-code",
-      method: "POST",
-      path: "/api/signup/verify-code",
-      description: "Valide le code recu par email avant la creation du compte",
-      requestExample: `POST /api/signup/verify-code\nContent-Type: application/json\n\n{\n  "email": "email@exemple.com",\n  "code": "123456"\n}`,
-      responseExample: [
-        {
-          status: 200,
-          message: "Email vérifié",
-          email: "email@exemple.com",
-        } as SignupResponse,
-        {
-          error: "L'email et le code sont requis",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Code invalide",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Code expiré",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Erreur interne du serveur",
-          status: 500,
-        } as BaseResponse,
-      ],
-      category: "signup",
-    },
-    {
-      id: "create-member",
-      method: "POST",
-      path: "/api/create-member",
-      description: "Crée un membre avec un compte utilisateur associé",
-      requestExample: `POST /api/create-member\nContent-Type: application/json\n\n{\n  "member_name": "NOM PRENOM",\n  "email": "membre@exemple.com",\n  "password": "MotDePasse123",\n  "adhesion_year": 2026\n}`,
-      responseExample: [
-        {
-          message: "Membre créé avec succès",
-          member_id: 145,
-          member_code: "NKZ-2026-0145",
-          member_type_code: "guest",
-          member_status_code: "defaulting",
-          status: 200,
-          customstatus: 200,
-        } as SignupResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Paramètre(s) manquant(s): adhesion_year",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "L'année d'adhésion doit être un entier.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "L'année d'adhésion configurée est invalide.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error:
-            "L'année d'adhésion ne correspond pas au paramétrage en vigueur.",
-          expected_adhesion_year: 2026,
-          received_adhesion_year: 2025,
-          status: 200,
-          customstatus: 400,
-        } as SignupResponse,
-        {
-          error: "Le mot de passe est invalide.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le mot de passe doit contenir au moins 8 caractères.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Email non vérifié. Vérifiez d'abord le code reçu.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error:
-            "Le code de vérification est expiré. Demandez un nouveau code.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le rôle mobile par défaut de l'API n'est pas configuré.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le rôle mobile par défaut de l'API est invalide.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le rôle mobile par défaut configuré est introuvable.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le compte utilisateur lié au membre n'a pas pu être créé.",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "signup",
-    },
+  const filteredEndpoints = allEndpoints.filter((ep) => (term ? matches(ep) : ep.category === activeCategory));
 
-    // Authentication Endpoints
-    {
-      id: "auth-login",
-      method: "POST",
-      path: "/api/auth/login",
-      description: "Authentifie un utilisateur et retourne un token JWT",
-      requestExample: `POST /api/auth/login\nContent-Type: application/json\n\n{\n  "login": "email@exemple.com",\n  "password": "votre_mot_de_passe"\n}`,
-      responseExample: [
-        {
-          token: "eyJhbGciOi...",
-          user_id: 1,
-          expires_in: 900,
-          mobile_role: {
-            id: 2,
-            code: "manager",
-            description: "Responsable mobile",
-          },
-          status: 200,
-        } as AuthResponse,
-        {
-          error: "Utilisateur introuvable",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Mot de passe incorrect",
-          status: 401,
-        } as BaseResponse,
-        {
-          error: "Échec de la génération du token",
-          status: 500,
-        } as BaseResponse,
-        {
-          error: "Configuration role mobile indisponible",
-          status: 500,
-        } as BaseResponse,
-        {
-          error: "Role mobile introuvable",
-          status: 403,
-        } as BaseResponse,
-      ],
-      category: "authentication",
-    },
-    {
-      id: "auth-refresh",
-      method: "POST",
-      path: "/api/auth/refresh",
-      description: "Rafraîchit un token JWT expiré en désactivant l'ancien",
-      requestExample: `POST /api/auth/refresh
-Content-Type: application/json
+  // Lien profond /#endpoint-<id> (depuis les parcours) : ouvrir la bonne categorie et deplier la fiche.
+  useEffect(() => {
+    const openFromHash = () => {
+      if (!window.location.hash.startsWith("#endpoint-")) return;
+      const id = window.location.hash.replace(/^#endpoint-/, "");
+      const ep = allEndpoints.find((e) => e.id === id);
+      if (!ep) return;
+      setSearchTerm("");
+      setActiveCategory(ep.category);
+      setExpandedEndpoint(ep.id);
+      setTimeout(() => {
+        document.getElementById(`endpoint-${ep.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, []);
 
-{
-  "token": "eyJhbGciOi..."
-}`,
-      responseExample: [
-        {
-          token: "nouveau_token...",
-          user_id: 1,
-          expires_in: 900,
-          status: 200,
-          customstatus: 200,
-        } as AuthResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Token manquant",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Le token n'est pas encore expiré",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Token invalide",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Utilisateur introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Échec de la génération du token",
-          status: 200,
-          customstatus: 500,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "authentication",
-    },
-    {
-      id: "update-password",
-      method: "POST",
-      path: "/api/auth/update-password",
-      description: "Met à jour le mot de passe de l'utilisateur",
-      requestExample: `POST /api/auth/update-password\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "old_password": "ancien_mdp",\n  "new_password": "nouveau_mdp"\n}`,
-      responseExample: [
-        {
-          message: "Mot de passe mis à jour",
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Les deux mots de passe sont requis",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Ancien et nouveau mot de passe identiques",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Mot de passe actuel incorrect",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Utilisateur introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-        } as BaseResponse,
-      ],
-      category: "password",
-    },
+  const category = categories[activeCategory];
+  const countByCategory = (key: CategoryKey) => allEndpoints.filter((e) => e.category === key).length;
 
-    // Password Reset Endpoints
-    {
-      id: "reset-request",
-      method: "POST",
-      path: "/api/auth/reset/request",
-      description: "Demande de réinitialisation de mot de passe",
-      requestExample: `POST /api/auth/reset/request\nContent-Type: application/json\n\n{\n  "email": "email@exemple.com"\n}`,
-      responseExample: [
-        {
-          status: 200,
-          email: "email@exemple.com",
-          username: "Nom Utilisateur",
-          message: "Code envoyé par email",
-          remaining: 180,
-        } as PasswordResetResponse,
-        {
-          error: "Utilisateur introuvable",
-          status: 400,
-        } as BaseResponse,
-        {
-          status: 429,
-          message: "Un code a déjà été envoyé",
-          remaining: 120,
-          username: "Nom Utilisateur",
-          email: "email@exemple.com",
-        } as PasswordResetResponse,
-        {
-          error:
-            "Le serveur d'envoi d'email n'est pas configuré. Veuillez configurer un serveur SMTP avec un FROM Filter dans Paramètres → Technique → Serveurs d'emails sortants.",
-          status: 503,
-        } as BaseResponse,
-        {
-          error: "Erreur lors de l'envoi du mail",
-          status: 500,
-        } as BaseResponse,
-      ],
-      category: "password",
-    },
-    {
-      id: "reset-verify",
-      method: "POST",
-      path: "/api/auth/reset/verify",
-      description: "Vérifie le code de réinitialisation",
-      requestExample: `POST /api/auth/reset/verify\nContent-Type: application/json\n\n{\n  "code": "123456"\n}`,
-      responseExample: [
-        {
-          status: 200,
-          code: "123456",
-          email: "email@exemple.com",
-          name: "Nom Utilisateur",
-        } as PasswordResetResponse,
-        {
-          error: "Utilisateur introuvable",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Code invalide ou expiré",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Erreur interne du serveur",
-          status: 500,
-        } as BaseResponse,
-      ],
-      category: "password",
-    },
-    {
-      id: "reset-confirm",
-      method: "POST",
-      path: "/auth/reset/confirm",
-      description: "Confirme la réinitialisation du mot de passe",
-      requestExample: `POST /auth/reset/confirm\nContent-Type: application/json\n\n{\n  "email": "email@exemple.com",\n  "new_password": "NouveauMDP123!",\n  "code": "123456"\n}`,
-      responseExample: [
-        {
-          status: 200,
-          message: "Mot de passe mis à jour avec succès",
-        } as BaseResponse,
-        {
-          error: "Code invalide ou expiré",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Utilisateur introuvable",
-          status: 400,
-        } as BaseResponse,
-        {
-          error: "Erreur interne du serveur",
-          status: 500,
-        } as BaseResponse,
-      ],
-      category: "password",
-    },
-
-    // Member Information Endpoints
-    {
-      id: "member-info",
-      method: "GET",
-      path: "/api/auth/member-info",
-      description: "Récupère les informations de base du membre",
-      requestExample: `GET /api/auth/member-info\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          name: "Nom du membre",
-          email: "email@exemple.com",
-          member_type: "Type de membre",
-          member_type_code: "active_member",
-          member_status: "Statut",
-          member_type_chips_color: "#ffffff",
-          mobile_role: {
-            id: 2,
-            code: "manager",
-            description: "Responsable mobile",
-          },
-          creation_date: "01/01/2023",
-          status: 200,
-          customstatus: 200,
-        } as MemberResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "member",
-    },
-    {
-      id: "home-member-info",
-      method: "GET",
-      path: "/api/auth/home-member-info",
-      description: "Récupère le solde actuel du membre",
-      requestExample: `GET /api/auth/home-member-info\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          name: "Nom du membre",
-          actual_balance: 1500.5,
-          status: 200,
-          customstatus: 200,
-        } as MemberResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "member",
-    },
-    {
-      id: "delete-member-account",
-      method: "POST",
-      path: "/api/auth/delete-member-account",
-      description: "Supprime le compte du membre connecté (soft delete : désactive l'accès sans supprimer les données)",
-      requestExample: `POST /api/auth/delete-member-account\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          message: "Compte supprimé avec succès",
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "member",
-    },
-
-    // Transactions Endpoints
-    {
-      id: "transactions-history",
-      method: "GET",
-      path: "/api/auth/member-transactions-history",
-      description: "Historique des transactions du membre",
-      requestExample: `GET /api/auth/member-transactions-history\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          status: 200,
-          customstatus: 200,
-          transaction_lines: [
-            {
-              formatted_date: "01 Jan 2023",
-              date: "2023-01-01",
-              name: "Libellé transaction",
-              amount: 100.5,
-              partner_linked_line_name: "",
-            },
-          ],
-        } as TransactionResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "transactions",
-    },
-
-    // Charges Endpoints
-    {
-      id: "member-charges",
-      method: "GET",
-      path: "/api/auth/member-charges",
-      description: "Liste des charges en attente",
-      requestExample: `GET /api/auth/member-charges\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          pending_charges: [
-            {
-              id: 1,
-              formatted_date: "01 Jan 2023",
-              date: "2023-01-01",
-              new_date: "2026-03-05",
-              name: "Facture électricité",
-              amount: 120.5,
-              can_be_manually_paid: true,
-              is_assurance_fees_manual_payment_readonly: false,
-              manual_payment: true,
-              is_overdue_payment_before: true,
-              is_overdue_payment_in_seven_days: false,
-              is_overdue_payment_after_seven_days: false,
-              partner_linked_line_name: "AMANDJA Leslie",
-            },
-          ],
-          manual_payment: false,
-          status: 200,
-          customstatus: 200,
-        } as ChargesResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "charges",
-    },
-    {
-      id: "update-payment-mode",
-      method: "POST",
-      path: "/api/auth/update-line-payment-mode",
-      description: "Modifie le mode de paiement d'une ligne",
-      requestExample: `POST /api/auth/update-line-payment-mode\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "line_id": 123\n}`,
-      responseExample: [
-        {
-          message: "Mode de paiement mis à jour",
-          status: 200,
-          customstatus: 200,
-        } as PaymentsResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Paiement à mettre à jour introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Paiement manuel en lecture seule",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Une erreur inconnue s'est produite lors de la mise à jour",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-      ],
-      category: "charges",
-    },
-    {
-      id: "update-all-payment-modes",
-      method: "POST",
-      path: "/api/auth/update-all-lines-payment-mode",
-      description: "Modifie le mode de paiement pour toutes les lignes",
-      requestExample: `POST /api/auth/update-all-lines-payment-mode\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{}`,
-      responseExample: [
-        {
-          message: "Mode de paiement mis à jour",
-          status: 200,
-          customstatus: 200,
-        } as PaymentsResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Une erreur inconnue s'est produite lors de la mise à jour",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-      ],
-      category: "charges",
-    },
-    {
-      id: "due-charges-list",
-      method: "GET",
-      path: "/api/auth/due-charges-list",
-      description: "Synthèse globale des charges échues",
-      requestExample: `GET /api/auth/due-charges-list\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          due_charges: [
-            {
-              id: 12,
-              entity_name: "Projet Assurance 2026",
-              entity_type: "Projet",
-              amount_total: 3500000,
-            },
-          ],
-          count: 1,
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "charges",
-    },
-    {
-      id: "user-due-charges-list",
-      method: "GET",
-      path: "/api/auth/user-due-charges-list",
-      description: "Détail des charges échues d'un partenaire",
-      requestExample: `GET /api/auth/user-due-charges-list\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "summary_id": 12\n}\n\nou\n\n{\n  "partner_id": 45\n}`,
-      responseExample: [
-        {
-          due_charges: [
-            {
-              id: 875,
-              formatted_date: "20/02/2026",
-              name: "Échéance cotisation",
-              partner_linked_line_name: "NKEZEFUU MEMBER",
-              debit: 150000,
-            },
-          ],
-          count: 1,
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Configuration manquante",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Ligne de synthèse introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Paramètre requis: summary_id ou partner_id",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-      ],
-      category: "charges",
-    },
-
-    // Recipes Endpoints
-    {
-      id: "member-recipes",
-      method: "GET",
-      path: "/api/auth/member-recipes",
-      description: "Liste des recettes en attente",
-      requestExample: `GET /api/auth/member-recipes\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          status: 200,
-          customstatus: 200,
-          pending_recipes: [
-            {
-              id: 1,
-              formatted_date: "01 Jan 2023",
-              date: "2023-01-01",
-              name: "Remboursement",
-              amount: 50.0,
-              partner_linked_line_name: "AMANDJA Leslie",
-            },
-          ],
-        } as ChargesResponse, // Reusing ChargesResponse as structure is similar
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "recipes",
-    },
-
-    // Payments Endpoints
-    {
-      id: "pay-line",
-      method: "POST",
-      path: "/api/auth/pay-line",
-      description:
-        "Effectue le paiement d'une charge(integration du paiement partiel en cours)",
-      requestExample: `POST /api/auth/pay-line\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "line_id": 123\n}`,
-      responseExample: [
-        {
-          message: "Paiement effectué avec succès",
-          status: 200,
-          customstatus: 200,
-        } as PaymentsResponse,
-        {
-          message: "Paiement partiel effectué avec succès",
-          paid_amount: 35000,
-          remaining_amount: 55000,
-          status: 200,
-          customstatus: 200,
-        } as PaymentsResponse,
-
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-
-        {
-          error: "Paiement à régler introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Solde negatif ou null",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Erreur survenue lors du paiment partiel",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Une erreur inconnue s'est produite lors du paiement",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-      ],
-      category: "payments",
-    },
-    {
-      id: "member-avalised-payments",
-      method: "GET",
-      path: "/api/auth/member-avalised-payments",
-      description:
-        "Liste des paiements pour lesquels le membre connecté est avaliste",
-      requestExample: `GET /api/auth/member-avalised-payments\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          avalised_payments: [
-            {
-              id: 81,
-              initial_date: "2026-02-01",
-              new_date: "2026-02-15",
-              partner: "Membre Exemple",
-              description: "Echéance avalisée",
-              amount: 150000,
-            },
-          ],
-          count: 1,
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "payments",
-    },
-    {
-      id: "referenced-members-list",
-      method: "GET",
-      path: "/api/auth/referenced-members-list",
-      description: "Liste des membres classés par référent",
-      requestExample: `GET /api/auth/referenced-members-list\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          total_referencers_count: 1,
-          members: [
-            {
-              id: 5,
-              name: "Referent Exemple",
-              referenced_members: [
-                {
-                  name: "Membre A",
-                  actual_balance: 25000,
-                  type: "Membre actif",
-                  status: "Actif",
-                  status_color: "#ffffff",
-                },
-              ],
-              referenced_members_count: 1,
-            },
-          ],
-          count: 1,
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "referenced_members",
-    },
-    {
-      id: "member-referenced-members-list",
-      method: "GET",
-      path: "/api/auth/member-referenced-members-list",
-      description: "Liste des membres référencés de l'utilisateur connecté",
-      requestExample: `GET /api/auth/member-referenced-members-list\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          referenced_members: [
-            {
-              name: "TEMKENG ZAMBOU Arielle",
-              actual_balance: 408825.0,
-              type: "Coopérateur",
-              status: "Défaillant",
-              status_color: "#DC2626",
-            },
-          ],
-          referenced_members_count: 1,
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "referenced_members",
-    },
-    {
-      id: "project-treasury-forecast-list",
-      method: "GET",
-      path: "/api/auth/project-treasury-forecast-list",
-      description: "Liste des prévisions de trésorerie par projet",
-      requestExample: `GET /api/auth/project-treasury-forecast-list\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          projects: [
-            {
-              project_code: "PRJ-001",
-              project_description: "Projet Assurance",
-              actual_balance: 2500000,
-              charges_to_pay_end_next_month: 400000,
-              treasury_forecast: 2100000,
-            },
-          ],
-          count: 1,
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expire",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "project_treasury",
-    },
-    //  Actions & investments Endpoints
-    {
-      id: "member-actions",
-      method: "GET",
-      path: "/api/auth/member-actions",
-      description: "Liste des Actions du membre",
-      requestExample: `GET /api/auth/member-actions\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          actions: [
-            {
-              project_name: "Projet d'assurances",
-              percentage: 0.19,
-              qty: 10,
-              amount: 10000.0,
-              total_amount: 100000,
-              for_sale: true,
-              prices_list: [5000.0, 8000.0],
-              qty_to_sell_max: 60,
-            },
-          ],
-          status: 200,
-          customstatus: 200,
-        } as ChargesResponse, // Reusing ChargesResponse as structure is similar
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "actions_investments",
-    },
-    {
-      id: "member-investments",
-      method: "GET",
-      path: "/api/auth/member-investments",
-      description: "Liste des investissements du membre",
-      requestExample: `GET /api/auth/member-investments\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          investments: [
-            {
-              project_name: "Vente des Beignets",
-              owner_parts: 5,
-              unit_sale_cost: 10000.0,
-              total_buy_price: 50000.0,
-              total_benefit: 51000.0,
-              payment_date: "2025-10-29",
-            },
-          ],
-          already_past_investments: [
-            {
-              project_name: "Vente des Beignets",
-              owner_parts: 5,
-              unit_sale_cost: 10000.0,
-              total_buy_price: 50000.0,
-              total_benefit: 51000.0,
-              payment_date: "2025-10-29",
-            },
-          ],
-          total_amount_invested: 500000,
-          total_amount_to_receive: 1000000,
-          status: 200,
-          customstatus: 200,
-        } as ChargesResponse, // Reusing ChargesResponse as structure is similar
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "actions_investments",
-    },
-    //  Actions market
-    {
-      id: "sell-action",
-      method: "POST",
-      path: "/api/auth/sell-action",
-      description: "Mise en vente d'une action par un membre",
-      requestExample: `POST /api/auth/sell-action\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "action_id": 66,\n  "unit_sale_price": 15000,\n  "qty_to_sell": 10\n}`,
-      responseExample: [
-        {
-          message: "Mise en vente d'actions réalisée avec succès",
-          unit_sale_price: 15000,
-          qty_to_sell: 10,
-          status: 200,
-          customstatus: 200,
-        } as PaymentsResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-
-        {
-          error: "Action à vendre recquis",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Quantité à vendre recquise",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Quantité à vendre négative ou nulle",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Prix unitaire de vente recquis",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Prix unitaire négatif ou null",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Action à vendre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Action déjà en vente à ce prix",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error:
-            "Vous ne pouvez pas vendre des actions car vous êtes de type invité",
-          member_type: "INVITE",
-          member_type_code: "guest",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error:
-            "La vente des actions n'est pas autorisé pour ce projet (autoriserVenteAction=False)",
-          allow_action_sale: false,
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Quantité maximale à vendre dépassée",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Une erreur inconnue s'est produite lors de la mise en vente",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-      ],
-      category: "actions_market",
-    },
-    {
-      id: "for-sale-list",
-      method: "GET",
-      path: "/api/auth/for-sale-list",
-      description: "Liste des Actions et investissements en vente",
-      requestExample: `GET /api/auth/for-sale-list\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          actual_balance: 150000.0,
-          total_actions_sale_amount: 0.0,
-          total_investments_sale_amount: 3750000.0,
-          total_global_sale_amount: 3750000.0,
-          selling_list: [
-            {
-              selling_action_id: 40,
-              is_selling_type_action: false,
-              is_member_the_owner: "N/A",
-              project_name: "Vente de tapioca",
-              owner_name: "N/A",
-              benefit_percentage: 3.0,
-              investment_duration: 3,
-              qty_to_sell: 5,
-              qty_to_sell_max: "N/A",
-              unit_sale_price: 10000.0,
-              total_sale_price: 50000.0,
-            },
-          ],
-          status: 200,
-          customstatus: 200,
-        } as ChargesResponse,
-        {
-          actual_balance: 550000.0,
-          selling_list: [
-            {
-              selling_action_id: 52,
-              is_selling_type_action: true,
-              is_member_the_owner: true,
-              project_name: "Projet d'assurances",
-              owner_name: "YVES PREMIER LOIC",
-              benefit_percentage: "N/A",
-              investment_duration: "N/A",
-              qty_to_sell: 5,
-              qty_to_sell_max: 20,
-              unit_sale_price: 10000.0,
-              total_sale_price: 50000.0,
-            },
-          ],
-          status: 200,
-          customstatus: 200,
-        } as ChargesResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "actions_market",
-    },
-    {
-      id: "add-qty-to-sell-action",
-      method: "POST",
-      path: "/api/auth/add-qty-to-sell-action",
-      description:
-        "Mise à jour de la quantité en vente d'une action par un membre",
-      requestExample: `POST /api/auth/add-qty-to-sell-action\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "selling_action_id": 66,\n  "qty_to_add": 10\n}`,
-      responseExample: [
-        {
-          message:
-            "Mise à jour de la quantité en vente d'actions réalisée avec succès",
-          status: 200,
-          customstatus: 200,
-          qty_to_sell: 7,
-        } as PaymentsResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-
-        {
-          error: "Action en vente recquis",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Quantité à ajouter recquise",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Quantité à ajouter négative ou nulle",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Action en vente  introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Quantité maximale à vendre dépassée",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Une erreur inconnue s'est produite lors de la mise en vente",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-      ],
-      category: "actions_market",
-    },
-    {
-      id: "cancel-selling-action",
-      method: "POST",
-      path: "/api/auth/cancel-selling-action",
-      description:
-        "Mise à jour de la quantité en vente d'une action par un membre",
-      requestExample: `POST /api/auth/cancel-selling-action\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "selling_action_id": 66\n}`,
-      responseExample: [
-        {
-          message: "Annulation de la vente réalisée avec succès",
-          status: 200,
-          customstatus: 200,
-        },
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-
-        {
-          error: "Action en vente recquis",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Action en vente  introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Une erreur inconnue s'est produite lors de la mise en vente",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-      ],
-      category: "actions_market",
-    },
-    {
-      id: "reduce-qty-to-sell-action",
-      method: "POST",
-      path: "/api/auth/reduce-qty-to-sell-action",
-      description: "Réduit la quantité d'actions actuellement en vente",
-      requestExample: `POST /api/auth/reduce-qty-to-sell-action\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{\n  "selling_action_id": 66,\n  "qty_to_reduce": 2\n}`,
-      responseExample: [
-        {
-          message: "Réduction de la quantité en vente réalisée",
-          qty_to_sell: 8,
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Vous n'êtes pas autorisé à modifier cette vente",
-          status: 200,
-          customstatus: 403,
-        } as BaseResponse,
-        {
-          error: "Action en vente introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-      ],
-      category: "actions_market",
-    },
-    {
-      id: "buy-actions-investments",
-      method: "POST",
-      path: "/api/auth/buy-actions-investments",
-      description:
-        "Achat d'actions ou de parts d'investissements par un membre",
-      requestExample: `POST /api/auth/buy-actions-investments\nAuthorization: Bearer <token>\nContent-Type: application/json\n\n{ 
-      "selling_action_id": 40,
-      "qty_to_buy": 20}`,
-      responseExample: [
-        {
-          message: "Achat de part d'actions réalisé avec succès",
-          status: 200,
-          customstatus: 200,
-          project_name: "Vente des Beignets",
-          qty_to_buy: 5,
-        } as BaseResponse,
-        {
-          message: "Achat de part d'investissements réalisé avec succès",
-          status: 200,
-          customstatus: 200,
-          project_name: "Vente des Beignets",
-          qty_to_buy: 5,
-        } as BaseResponse,
-        {
-          error: "Authentification requise",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expiré",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Format JSON invalide",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-
-        {
-          error: "Action ou investissement  en vente recquis",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Quantité à acheter recquise",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Action ou investissement  en vente  introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Quantité à acheter  négative ou nulle",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Solde insuffisant",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-
-        {
-          error: "Nombre de parts en vente dépassé",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-
-        {
-          error: "Membre propriétaire de l'action",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-        {
-          error: "Nombre d'actions en vente dépassé",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-
-        {
-          error: "Une erreur inconnue s'est produite lors de la mise en vente",
-          status: 200,
-          customstatus: 400,
-        } as BaseResponse,
-      ],
-      category: "actions_market",
-    },
-    {
-      id: "mobile-functions",
-      method: "GET",
-      path: "/api/auth/mobile-functions",
-      description: "Retourne la liste des fonctions mobiles disponibles",
-      requestExample: `GET /api/auth/mobile-functions\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          mobile_functions: [
-            {
-              id: 1,
-              code: "dashboard",
-              description: "Tableau de bord",
-              color_code_light: "#4f46e5",
-              color_code_dark: "#312e81",
-            },
-          ],
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expire",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Modeles mobile indisponibles",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "mobile",
-    },
-    {
-      id: "mobile-functions-with-roles",
-      method: "GET",
-      path: "/api/auth/mobile-functions-with-roles",
-      description: "Retourne les fonctions mobiles avec leurs rôles autorisés",
-      requestExample: `GET /api/auth/mobile-functions-with-roles\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          mobile_functions: [
-            {
-              id: 1,
-              code: "dashboard",
-              description: "Tableau de bord",
-              color_code_light: "#4f46e5",
-              color_code_dark: "#312e81",
-              allowed_roles: [
-                {
-                  id: 2,
-                  code: "manager",
-                  description: "Responsable mobile",
-                },
-              ],
-            },
-          ],
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expire",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Modeles mobile indisponibles",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "mobile",
-    },
-    {
-      id: "mobile-functions-by-user",
-      method: "GET",
-      path: "/api/auth/mobile-functions-by-user",
-      description:
-        "Retourne les fonctions mobiles du rôle de l'utilisateur connecté",
-      requestExample: `GET /api/auth/mobile-functions-by-user\nAuthorization: Bearer <token>`,
-      responseExample: [
-        {
-          role: {
-            id: 2,
-            code: "manager",
-            description: "Responsable mobile",
-          },
-          mobile_functions: [
-            {
-              id: 23,
-              code: "01",
-              description: "Historique",
-              color_code_light: "#000000",
-              color_code_dark: "#ffffff",
-              total: 546630.0,
-            },
-            {
-              id: 24,
-              code: "02",
-              description: "A recevoir",
-              color_code_light: "#000000",
-              color_code_dark: "#ffffff",
-              total: 0.0,
-            },
-            {
-              id: 25,
-              code: "03",
-              description: "A payer",
-              color_code_light: "#000000",
-              color_code_dark: "#ffffff",
-              total: 0.0,
-            },
-          ],
-          status: 200,
-          customstatus: 200,
-        } as BaseResponse,
-        {
-          error: "Token invalide ou expire",
-          status: 200,
-          customstatus: 401,
-        } as BaseResponse,
-        {
-          error: "Modeles mobile indisponibles",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Membre introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Configuration role mobile indisponible",
-          status: 200,
-          customstatus: 500,
-        } as BaseResponse,
-        {
-          error: "Role mobile introuvable",
-          status: 200,
-          customstatus: 404,
-        } as BaseResponse,
-        {
-          error: "Erreur serveur",
-          status: 500,
-          customstatus: 500,
-        } as BaseResponse,
-      ],
-      category: "mobile",
-    },
-  ];
-  // Filter endpoints by category and search term
-  const filteredEndpoints = allEndpoints.filter(
-    (ep) =>
-      ep.category === activeCategory &&
-      (ep.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ep.description.toLowerCase().includes(searchTerm.toLowerCase())),
+  const aside = (
+    <>
+      <div className="mb-6">
+        <label htmlFor="endpoint-search" className="label block mb-2">
+          Rechercher
+        </label>
+        <input
+          id="endpoint-search"
+          type="search"
+          placeholder="chemin, champ, message…"
+          className="w-full bg-surface border border-rule rounded-md px-3 py-2 text-sm placeholder:text-faint focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+      <AsideGroup title="Catégories">
+        {(Object.keys(categories) as CategoryKey[]).map((key) => (
+          <AsideItem
+            key={key}
+            active={activeCategory === key && !term}
+            onClick={() => {
+              setSearchTerm("");
+              setActiveCategory(key);
+              setExpandedEndpoint(null);
+            }}
+            hint={String(countByCategory(key))}
+          >
+            {categories[key].name}
+          </AsideItem>
+        ))}
+      </AsideGroup>
+    </>
   );
 
-  const toggleEndpoint = (id: string) => {
-    setExpandedEndpoint(expandedEndpoint === id ? null : id);
-  };
-
-  // Helper function to format response examples
-  const formatResponse = (response: EndpointResponse) => {
-    return JSON.stringify(response, null, 2);
-  };
-
-  const getUsageComment = (endpoint: Endpoint) => {
-    switch (endpoint.id) {
-      case "signup-request-code":
-        return "envoie un code OTP d'inscription a l'email saisi, avec limitation de renvoi et verification de la configuration SMTP.";
-      case "signup-verify-code":
-        return "verifie le code OTP d'inscription recu par email avant d'autoriser la creation du compte.";
-      case "create-member":
-        return "finalise l'inscription en creant le membre et l'utilisateur apres verification du code email et de l'annee d'adhesion.";
-      case "auth-login":
-        return "ouvre la session mobile, verifie le compte, puis retourne le token JWT et le role mobile du membre.";
-      case "auth-refresh":
-        return "renouvelle uniquement un token deja expire en desactivant l'ancien pour prolonger la session utilisateur.";
-      case "update-password":
-        return "permet a l'utilisateur connecte de changer son mot de passe apres verification de l'ancien.";
-      case "reset-request":
-        return "demarre la procedure de mot de passe oublie en envoyant un code OTP par email.";
-      case "reset-verify":
-        return "valide le code OTP recu pour autoriser l'etape finale de reinitialisation.";
-      case "reset-confirm":
-        return "applique le nouveau mot de passe du compte a partir de l'email et du code valide.";
-      case "member-info":
-        return "retourne l'identite du membre, son type, son statut et son role mobile.";
-      case "home-member-info":
-        return "fournit les donnees d'accueil du membre avec son solde actuel.";
-      case "member-balances":
-        return "donne un resume financier global du membre (solde, charges, recettes, actions, investissements).";
-      case "transactions-history":
-        return "liste l'historique des ecritures liees au membre pour affichage des mouvements.";
-      case "member-charges":
-        return "retourne les charges a payer du membre avec indicateurs d'echeance et paiement manuel.";
-      case "due-charges-list":
-        return "retourne la synthese des charges echues pour tous les projets et membres.";
-      case "user-due-charges-list":
-        return "retourne le detail des lignes echues d'un partenaire cible via summary_id ou partner_id.";
-      case "update-payment-mode":
-        return "active ou desactive le mode de paiement manuel pour une charge precise.";
-      case "update-all-payment-modes":
-        return "bascule le mode de paiement manuel pour toutes les charges eligibles du membre.";
-      case "member-recipes":
-        return "retourne les recettes/entrees d'argent en attente pour le membre.";
-      case "pay-line":
-        return "execute le reglement d'une charge, en total ou partiel selon le solde disponible du membre.";
-      case "member-avalised-payments":
-        return "retourne les paiements en attente dans lesquels le membre connecte intervient comme avaliste.";
-      case "referenced-members-list":
-        return "retourne les membres regroupes par referent, avec le detail des membres references.";
-      case "project-treasury-forecast-list":
-        return "retourne la prevision de tresorerie par projet avec le solde actuel et les charges a payer.";
-      case "member-actions":
-        return "retourne le portefeuille d'actions du membre avec quantites, valeurs et etat de mise en vente.";
-      case "member-investments":
-        return "retourne les investissements en cours et deja passes avec leurs montants et dates de paiement.";
-      case "sell-action":
-        return "cree une offre de vente d'actions du membre avec prix unitaire et quantite.";
-      case "for-sale-list":
-        return "affiche le marche des actions et investissements actuellement en vente.";
-      case "add-qty-to-sell-action":
-        return "augmente la quantite restante d'une action deja en vente.";
-      case "cancel-selling-action":
-        return "annule une vente d'actions et retire l'offre du marche.";
-      case "reduce-qty-to-sell-action":
-        return "diminue la quantite d'actions exposee sur une vente existante.";
-      case "buy-actions-investments":
-        return "realise l'achat d'une offre du marche (actions ou parts d'investissement).";
-      case "mobile-functions":
-        return "retourne le catalogue complet des fonctionnalites mobiles disponibles dans le systeme.";
-      case "mobile-functions-with-roles":
-        return "retourne les fonctionnalites mobiles avec les roles autorises pour chacune.";
-      case "mobile-functions-by-user":
-        return "retourne le role mobile du membre connecte et les fonctionnalites qu'il peut utiliser.";
-      default:
-        return endpoint.description;
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Head>
-        <title>Documentation API NKEZEFUU</title>
-        <meta name="description" content="Liste des services API NKEZEFUU" />
-
-        {/* Open Graph / Facebook */}
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://api-docs.nkezefuu.com" />
-        <meta property="og:title" content="Documentation API NKEZEFUU" />
-        <meta
-          property="og:description"
-          content="Liste des services API NKEZEFUU"
-        />
-        <meta
-          property="og:image"
-          content="https://api-docs.nkezefuu.com/social-preview.jpeg"
-        />
-
-        {/* Twitter */}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:url" content="https://api-docs.nkezefuu.com" />
-        <meta name="twitter:title" content="Documentation API NKEZEFUU" />
-        <meta
-          name="twitter:description"
-          content="Liste des services API NKEZEFUU"
-        />
-        <meta
-          name="twitter:image"
-          content="https://api-docs.nkezefuu.com/social-preview.jpeg"
-        />
-      </Head>
-
-      {/* Header */}
-      <header className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            {/* Logo and title - visible on all screens */}
-            <div className="flex items-center space-x-4">
-              {/* Small screen logo (hidden on large screens) */}
-              <div className="flex items-center justify-center h-12 w-12  rounded-lg shadow md:hidden">
-                <Image
-                  src="/logo.png"
-                  alt="Nkezefuu Logo"
-                  width={200}
-                  height={200}
-                  className="object-contain"
-                />
-              </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold">
-                  Documentation API
-                </h1>
-                <p className="mt-1 text-sm md:text-base opacity-90">
-                  Liste des endpoints(services) nkezefuu
-                </p>
-              </div>
-            </div>
-
-            {/* Large screen logo - hidden on small screens */}
-            <div className="hidden md:flex items-center justify-center h-16 w-16 rounded-lg shadow">
-              <Image
-                src="/logo.png"
-                alt="Nkezefuu Logo"
-                width={700}
-                height={700}
-                className="object-contain"
-              />
-            </div>
-          </div>
-        </div>
-      </header>
-      <main className="container mx-auto px-4 py-8">
-        {/* Search bar */}
-        <div className="mb-6">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Rechercher un endpoint..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <svg
-              className="absolute right-3 top-2.5 h-5 w-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
-        </div>
-
-        {/* Category navigation */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {(Object.keys(categories) as Array<keyof Categories>).map((key) => (
-            <button
-              key={key}
-              onClick={() => setActiveCategory(key)}
-              className={`px-4 py-2 rounded-md font-medium transition-all whitespace-nowrap ${
-                activeCategory === key
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-              }`}
-            >
-              {categories[key].name}
-            </button>
-          ))}
-        </div>
-
-        {/* Category description */}
-        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded">
-          <h2 className="text-lg font-semibold text-blue-800">
-            {categories[activeCategory].name}
-          </h2>
-          <p className="text-blue-700">
-            {categories[activeCategory].description}
+    <Shell aside={aside}>
+      {term ? (
+        <div className="mb-6 rounded-lg bg-blue-50 px-5 py-4">
+          <h1 className="text-2xl font-semibold text-blue-900">Recherche</h1>
+          <p className="text-blue-800 mt-1">
+            {filteredEndpoints.length} endpoint{filteredEndpoints.length > 1 ? "s" : ""} pour « {searchTerm} », toutes catégories confondues.
           </p>
         </div>
-
-        {/* Endpoints list */}
-        <div className="space-y-4">
-          {filteredEndpoints.length > 0 ? (
-            filteredEndpoints.map((endpoint) => (
-              <div
-                key={endpoint.id}
-                className="bg-white rounded-lg shadow overflow-hidden border border-gray-200 transition-all hover:shadow-md"
-              >
-                <div
-                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => toggleEndpoint(endpoint.id)}
-                >
-                  <div className="flex items-center space-x-4">
-                    <span
-                      className={`px-3 py-1 rounded text-sm font-medium ${
-                        endpoint.method === "GET"
-                          ? "bg-green-100 text-green-800"
-                          : endpoint.method === "POST"
-                            ? "bg-blue-100 text-blue-800"
-                            : endpoint.method === "PUT"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : endpoint.method === "DELETE"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {endpoint.method}
-                    </span>
-                    <div>
-                      <span className="font-mono text-gray-800">
-                        {endpoint.path}
-                      </span>
-                      <p className="text-sm text-gray-500">
-                        {endpoint.description}
-                      </p>
-                    </div>
-                  </div>
-                  <svg
-                    className={`w-5 h-5 text-gray-500 transform transition-transform ${
-                      expandedEndpoint === endpoint.id ? "rotate-180" : ""
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div>
-
-                {expandedEndpoint === endpoint.id && (
-                  <div className="p-4 border-t border-gray-200 bg-gray-50 animate-fadeIn">
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div>
-                        <h3 className="font-medium text-gray-900 mb-2 flex items-center">
-                          <svg
-                            className="w-4 h-4 mr-2"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                            />
-                          </svg>
-                          Requête
-                        </h3>
-                        <pre className="bg-gray-800 text-gray-100 p-4 rounded-md overflow-x-auto text-sm">
-                          {endpoint.requestExample}
-                        </pre>
-                        <p className="mt-3 text-sm text-gray-600 italic">
-                          {getUsageComment(endpoint)}
-                        </p>
-                      </div>
-                      <div>
-                        <h3 className="font-medium text-gray-900 mb-2 flex items-center">
-                          <svg
-                            className="w-4 h-4 mr-2"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-                            />
-                          </svg>
-                          Réponses
-                        </h3>
-                        {Array.isArray(endpoint.responseExample) ? (
-                          endpoint.responseExample.map((response, index) => (
-                            <div key={index} className="mb-4 last:mb-0">
-                              <div className="text-sm font-medium mb-1">
-                                Status: {response.status}
-                                {response.customstatus &&
-                                  ` (${response.customstatus})`}
-                              </div>
-                              <pre className="bg-gray-800 text-gray-100 p-4 rounded-md overflow-x-auto text-sm">
-                                {formatResponse(response)}
-                              </pre>
-                            </div>
-                          ))
-                        ) : (
-                          <pre className="bg-gray-800 text-gray-100 p-4 rounded-md overflow-x-auto text-sm">
-                            {formatResponse(endpoint.responseExample)}
-                          </pre>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-8">
-              <svg
-                className="mx-auto h-12 w-12 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <h3 className="mt-2 text-lg font-medium text-gray-900">
-                Aucun résultat trouvé
-              </h3>
-              <p className="mt-1 text-gray-500">Essayez avec Autrement</p>
-            </div>
-          )}
+      ) : (
+        <div className="mb-6 rounded-lg bg-blue-50 px-5 py-4">
+          <h1 className="text-2xl font-semibold text-blue-900">{category.name}</h1>
+          <p className="text-blue-800 mt-1 max-w-prose">{category.description}</p>
         </div>
-      </main>
-      <footer className="bg-gray-100 border-t border-gray-200 py-8 mt-12">
-        <div className="container mx-auto px-4">
-          {/* Logo Section */}
-          <div className="bg-white p-1 rounded-lg shadow-md w-full max-w-[300px] mx-auto">
-            <div className="relative w-full h-24">
-              {/* Adjust height as needed */}
-              <Image
-                src="/social-preview.jpeg"
-                alt="NKEZEFUU Logo"
-                fill
-                className="object-contain p-2"
-                sizes="(max-width: 768px) 100vw, 300px"
-              />
-            </div>
-          </div>
+      )}
 
-          {/* Copyright */}
-          <div className="mt-8 pt-6 border-t border-gray-200 text-center text-gray-500 text-sm">
-            <p>© {new Date().getFullYear()} NKEZEFUU. Tous droits réservés</p>
-          </div>
+      {!term && activeCategory === "signup" && (
+        <div className="mb-8 text-sm text-ink max-w-prose space-y-2">
+          <p>
+            <span className="text-muted">Conventions.</span> Sauf mention contraire, chaque appel envoie{" "}
+            <code>Authorization: Bearer &lt;token&gt;</code> et reçoit du JSON. Le code HTTP est presque toujours 200 : c&apos;est{" "}
+            <code>customstatus</code> qui porte le résultat (200 succès, 400 requête invalide, 401 authentification, 403 accès
+            refusé, 404 introuvable, 500 erreur serveur) et <code>error</code> le message à afficher.
+          </p>
+          <p>
+            Les routes marquées <Tag>json-rpc</Tag> renvoient leurs champs dans <code>result</code> et utilisent{" "}
+            <code>result.status</code> à la place de customstatus.
+          </p>
         </div>
-      </footer>
+      )}
 
-      {/* Animation styles */}
-      <style jsx global>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out forwards;
-        }
-      `}</style>
-    </div>
+      <div className="bg-surface border border-rule rounded-lg shadow-sm overflow-hidden">
+        {filteredEndpoints.length > 0 ? (
+          filteredEndpoints.map((endpoint) => (
+            <EndpointRow
+              key={endpoint.id}
+              endpoint={endpoint}
+              expanded={expandedEndpoint === endpoint.id}
+              onToggle={() => setExpandedEndpoint(expandedEndpoint === endpoint.id ? null : endpoint.id)}
+            />
+          ))
+        ) : (
+          <p className="px-4 py-10 text-muted">Aucun endpoint ne correspond. Essayez un autre terme.</p>
+        )}
+      </div>
+    </Shell>
   );
 }

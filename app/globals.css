@@ -1,26 +1,166 @@
 @import "tailwindcss";
 
+/* Identite visuelle historique de la doc (indigo / violet sur fond gris clair, panneaux blancs,
+   blocs de code sombres), appliquee a une structure de manuel : barre laterale, tableaux a filets,
+   codes et chiffres en mono. Pas de mode sombre. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f9fafb;
+  --surface: #ffffff;
+  --ink: #111827;
+  --muted: #6b7280;
+  --faint: #9ca3af;
+  --rule: #e5e7eb;
+  --rule-strong: #c7d2fe;
+  --accent: #4f46e5;
+  --accent-ink: #3730a3;
+  --accent-soft: #eef2ff;
+  --code-bg: #1f2937;
+  --code-ink: #f3f4f6;
+  --ok: #15803d;
+  --ok-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --err: #b91c1c;
+  --err-soft: #fee2e2;
+  --post: #1e40af;
+  --post-soft: #dbeafe;
+  --get: #166534;
+  --get-soft: #dcfce7;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-code-bg: var(--code-bg);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-err: var(--err);
+  --color-err-soft: var(--err-soft);
+  --color-post: var(--post);
+  --color-post-soft: var(--post-soft);
+  --color-get: var(--get);
+  --color-get-soft: var(--get-soft);
+  --color-code-ink: var(--code-ink);
+  --font-sans: var(--font-plex-sans), "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-plex-sans), sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1, "kern" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Etiquette de section : petites capitales espacees en mono, comme un intertitre de manuel. */
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Tableaux : en-tete gris clair, filets fins, pas de zebrage. */
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: var(--surface);
+}
+.ledger th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--muted);
+  background: #f3f4f6;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+.ledger td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.ledger tr:last-child td {
+  border-bottom: none;
+}
+
+/* Bloc de code : sombre, comme dans la version precedente de la doc. */
+.codeblock {
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 0.9rem 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--code-ink);
+}
+
+/* Triangle natif de <summary> masque : on dessine le notre (Chrome via arbitrary variant,
+   Firefox/vieux WebKit via ce selecteur global). */
+summary {
+  list-style: none;
+}
+summary::marker {
+  display: none;
+}
+
+/* Liens dans le texte courant. */
+.prose-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-underline-offset: 0.2em;
+}
+.prose-link:hover {
+  text-decoration-color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
