@@ -148,9 +148,21 @@ function ScreenTable({ title, endpointIds, fields, note }: { title: string; endp
   );
 }
 
+function MockupBlock({ title, html }: { title?: string; html: string }) {
+  return (
+    <div>
+      {title && <h3 className="font-semibold text-ink mb-2 text-sm">{title}</h3>}
+      <div className="border border-rule rounded-lg p-4 bg-paper" dangerouslySetInnerHTML={{ __html: html }} />
+    </div>
+  );
+}
+
 function Block({ block }: { block: StepBlock }) {
   if (block.kind === "screen") {
     return <ScreenTable title={block.title} endpointIds={block.endpointIds} fields={block.fields} note={block.note} />;
+  }
+  if (block.kind === "mockup") {
+    return <MockupBlock title={block.title} html={block.html} />;
   }
   return <RulesTable title={block.title} rows={block.rows} />;
 }

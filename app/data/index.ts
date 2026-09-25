@@ -5,6 +5,7 @@ import { memberEndpoints } from "./member";
 import { loanEndpoints } from "./loans";
 import { actionEndpoints } from "./actions";
 import { mobileEndpoints } from "./mobile";
+import { bankAccountEndpoints } from "./bank_accounts";
 
 export type { Access, Categories, Category, CategoryKey, Endpoint, ErrorDoc, FieldDoc, ParamDoc } from "./types";
 
@@ -65,6 +66,10 @@ export const categories: Categories = {
     name: "Prévision Trésorerie",
     description: "Previsions de trésorerie des projets",
   },
+  bank_accounts: {
+    name: "Comptes bancaires",
+    description: "Comptes bancaires, dépôts/retraits et virements : deux rôles seulement, admin système et Gestionnaire des comptes bancaires",
+  },
 };
 
 export const allEndpoints: Endpoint[] = [
@@ -74,4 +79,5 @@ export const allEndpoints: Endpoint[] = [
   ...loanEndpoints,
   ...actionEndpoints,
   ...mobileEndpoints,
+  ...bankAccountEndpoints,
 ];

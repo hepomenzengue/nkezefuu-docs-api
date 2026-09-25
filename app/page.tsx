@@ -9,6 +9,11 @@ const accessLabel: Record<Access, { label: string; help: string }> = {
   member: { label: "membre", help: "Tout membre authentifié (jeton Bearer)" },
   manager: { label: "gestionnaire", help: "Réservé aux gestionnaires nkezefuu et administrateurs" },
   all: { label: "selon rôle", help: "Tout membre authentifié, comportement différent pour un gestionnaire" },
+  admin: { label: "admin seul", help: "Administrateur système uniquement, même le Gestionnaire des comptes bancaires n'y a pas accès" },
+  bank_account_manager: {
+    label: "gest. comptes bancaires",
+    help: "Administrateur système, ou Gestionnaire des comptes bancaires (rôle distinct du Gestionnaire nkezefuu, qui n'a aucun accès ici)",
+  },
 };
 
 const paramInLabel: Record<string, string> = {

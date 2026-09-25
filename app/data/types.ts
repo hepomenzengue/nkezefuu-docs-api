@@ -16,14 +16,22 @@ export type CategoryKey =
   | "actions_market"
   | "mobile"
   | "referenced_members"
-  | "project_treasury";
+  | "project_treasury"
+  | "bank_accounts";
 
 // Qui peut appeler l'endpoint.
-// public   : aucun jeton
-// member   : tout membre authentifie (jeton Bearer)
-// manager  : Gestionnaire nkezefuu ou Administrateur uniquement
-// all      : tout membre, avec un comportement qui depend du role
-export type Access = "public" | "member" | "manager" | "all";
+// public              : aucun jeton
+// member              : tout membre authentifie (jeton Bearer)
+// manager             : Gestionnaire nkezefuu ou Administrateur uniquement
+// all                 : tout membre, avec un comportement qui depend du role
+// admin               : administrateur systeme (base.group_system) uniquement.
+//                        Reserve aux comptes bancaires : ni le role Gestionnaire nkezefuu
+//                        ni le role Gestionnaire des comptes bancaires n'y suffisent.
+// bank_account_manager: administrateur systeme, ou Gestionnaire des comptes bancaires
+//                        (role distinct du Gestionnaire nkezefuu, qui n'a lui aucun acces
+//                        a ce perimetre). Les nuances plus fines (compte precis gere,
+//                        emetteur/destinataire designe, createur...) sont dans "notes".
+export type Access = "public" | "member" | "manager" | "all" | "admin" | "bank_account_manager";
 
 export type ParamIn = "path" | "query" | "body";
 
