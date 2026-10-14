@@ -3,11 +3,44 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { useAuth } from "./AuthGate";
 
 const sections = [
-  { href: "/", label: "Endpoints", isActive: (p: string) => p === "/" },
+  { href: "/", label: "Services", isActive: (p: string) => p === "/" },
   { href: "/parcours/", label: "Parcours", isActive: (p: string) => p.startsWith("/parcours") },
+  { href: "/recette/", label: "Recette", isActive: (p: string) => p.startsWith("/recette") },
 ];
+
+// Nom de l'utilisateur connecte, acces a son profil et deconnexion, en haut a droite.
+function UserMenu() {
+  const { user, logout } = useAuth();
+  return (
+    <details className="relative group/user">
+      <summary className="flex items-center gap-2 cursor-pointer select-none text-sm text-indigo-100 hover:text-white [&::-webkit-details-marker]:hidden">
+        <span className="font-medium">{user.name}</span>
+        <span className="font-mono text-xs transition-transform group-open/user:rotate-90" aria-hidden="true">
+          ›
+        </span>
+      </summary>
+      <div className="absolute right-0 mt-2 w-56 bg-surface text-ink border border-rule rounded-lg shadow-lg py-1 z-20">
+        <div className="px-4 py-2 border-b border-rule">
+          <div className="text-sm font-medium truncate">{user.name}</div>
+          <div className="text-xs text-muted truncate">{user.login}</div>
+        </div>
+        <Link href="/profil/" className="block px-4 py-2 text-sm hover:bg-gray-50">
+          Mon profil
+        </Link>
+        <button
+          type="button"
+          onClick={() => logout()}
+          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer"
+        >
+          Se déconnecter
+        </button>
+      </div>
+    </details>
+  );
+}
 
 // Coque commune : barre haute fine, barre laterale (contenu fourni par la page), colonne principale.
 export default function Shell({ aside, children }: { aside?: ReactNode; children: ReactNode }) {
@@ -25,7 +58,7 @@ export default function Shell({ aside, children }: { aside?: ReactNode; children
               <div className="min-w-0">
                 <h1 className="text-2xl md:text-3xl font-bold">NKEZEFUU</h1>
                 <p className="mt-1 text-sm md:text-base opacity-90">
-                  Guide d&apos;intégration de l&apos;API mobile : endpoints, parcours et cas de test
+                  Documentation de l&apos;API mobile et recette de l&apos;application
                 </p>
               </div>
             </div>
@@ -34,24 +67,27 @@ export default function Shell({ aside, children }: { aside?: ReactNode; children
             </div>
           </div>
 
-          <nav className="mt-5 flex gap-6" aria-label="Sections">
-            {sections.map((s) => {
-              const active = s.isActive(pathname);
-              return (
-                <Link
-                  key={s.href}
-                  href={s.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`relative pb-3 text-sm font-medium transition-colors ${
-                    active ? "text-white" : "text-indigo-100 hover:text-white"
-                  }`}
-                >
-                  {s.label}
-                  {active && <span className="absolute left-0 right-0 bottom-0 h-0.5 bg-white rounded-full" aria-hidden="true" />}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="mt-5 flex items-start justify-between gap-6">
+            <nav className="flex gap-6" aria-label="Sections">
+              {sections.map((s) => {
+                const active = s.isActive(pathname);
+                return (
+                  <Link
+                    key={s.href}
+                    href={s.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`relative pb-3 text-sm font-medium transition-colors ${
+                      active ? "text-white" : "text-indigo-100 hover:text-white"
+                    }`}
+                  >
+                    {s.label}
+                    {active && <span className="absolute left-0 right-0 bottom-0 h-0.5 bg-white rounded-full" aria-hidden="true" />}
+                  </Link>
+                );
+              })}
+            </nav>
+            <UserMenu />
+          </div>
         </div>
       </header>
 

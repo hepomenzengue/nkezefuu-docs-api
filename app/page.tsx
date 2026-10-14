@@ -1,19 +1,20 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import LoadState from "./components/LoadState";
+import { ServicesSkeleton } from "./components/Skeleton";
 import Shell, { AsideGroup, AsideItem } from "./components/Shell";
-import { allEndpoints, categories } from "./data";
-import type { Access, CategoryKey, Endpoint, ErrorDoc } from "./data";
+import type { ErrorDoc, Service, ServiceCategory } from "./lib/types";
+import { useApi } from "./lib/useApi";
 
-const accessLabel: Record<Access, { label: string; help: string }> = {
-  public: { label: "public", help: "Aucun jeton requis" },
-  member: { label: "membre", help: "Tout membre authentifié (jeton Bearer)" },
-  manager: { label: "gestionnaire", help: "Réservé aux gestionnaires nkezefuu et administrateurs" },
-  all: { label: "selon rôle", help: "Tout membre authentifié, comportement différent pour un gestionnaire" },
-  admin: { label: "admin seul", help: "Administrateur système uniquement, même le Gestionnaire des comptes bancaires n'y a pas accès" },
-  bank_account_manager: {
-    label: "gest. comptes bancaires",
-    help: "Administrateur système, ou Gestionnaire des comptes bancaires (rôle distinct du Gestionnaire nkezefuu, qui n'a aucun accès ici)",
-  },
+// Le libelle de l'acces vient de l'API ; l'explication au survol reste ici.
+const accessHelp: Record<string, string> = {
+  public: "Aucun jeton requis",
+  member: "Tout membre authentifié (jeton Bearer)",
+  manager: "Réservé aux gestionnaires nkezefuu et administrateurs",
+  all: "Tout membre authentifié, comportement différent pour un gestionnaire",
+  admin: "Administrateur système uniquement, même le Gestionnaire des comptes bancaires n'y a pas accès",
+  bank_account_manager:
+    "Administrateur système, ou Gestionnaire des comptes bancaires (rôle distinct du Gestionnaire nkezefuu, qui n'a aucun accès ici)",
 };
 
 const paramInLabel: Record<string, string> = {
@@ -76,32 +77,30 @@ function Disclosure({ label, children, className = "mt-3" }: { label: string; ch
 // Corps JSON d'une erreur, tel qu'il etait affiche avant : le message dans error, puis
 // le ou les codes. Sur une route json-rpc, le code applicatif est result.status et il
 // n'y a pas de customstatus.
-function errorBody(e: ErrorDoc, envelope?: "jsonrpc"): Record<string, unknown> {
+function errorBody(e: ErrorDoc, envelope: "jsonrpc" | null): Record<string, unknown> {
   if (envelope === "jsonrpc") return { error: e.message, status: e.customstatus ?? e.status };
   return e.customstatus === undefined
     ? { error: e.message, status: e.status }
     : { error: e.message, status: e.status, customstatus: e.customstatus };
 }
 
-function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; expanded: boolean; onToggle: () => void }) {
-  const access = accessLabel[endpoint.access];
-
+function ServiceRow({ service, expanded, onToggle }: { service: Service; expanded: boolean; onToggle: () => void }) {
   return (
-    <article id={`endpoint-${endpoint.id}`} className="border-t border-rule scroll-mt-6 first:border-t-0">
+    <article id={`service-${service.code}`} className="border-t border-rule scroll-mt-6 first:border-t-0">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
         className="w-full text-left px-4 py-3.5 flex items-start gap-4 hover:bg-gray-50 transition-colors cursor-pointer"
       >
-        <Method method={endpoint.method} />
+        <Method method={service.method} />
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <code className="text-sm text-ink break-all">{endpoint.path}</code>
-            <Tag title={access.help}>{access.label}</Tag>
-            {endpoint.envelope === "jsonrpc" && <Tag title="Réponse enveloppée dans { jsonrpc, id, result }">json-rpc</Tag>}
+            <code className="text-sm text-ink break-all">{service.path}</code>
+            <Tag title={accessHelp[service.access.code]}>{service.access.label}</Tag>
+            {service.envelope === "jsonrpc" && <Tag title="Réponse enveloppée dans { jsonrpc, id, result }">json-rpc</Tag>}
           </span>
-          <span className="block text-sm text-muted mt-0.5">{endpoint.summary}</span>
+          <span className="block text-sm text-muted mt-0.5">{service.summary}</span>
         </span>
         <span
           className={`font-mono text-faint text-sm mt-0.5 transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -113,14 +112,14 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
 
       {expanded && (
         <div className="px-4 pb-8 pt-2 space-y-7 bg-gray-50 border-t border-rule">
-          {endpoint.usage && (
+          {service.usage && (
             <p className="text-sm text-ink max-w-prose">
-              <span className="text-muted">Quand l&apos;appeler.</span> {endpoint.usage}
+              <span className="text-muted">Quand l&apos;appeler.</span> {service.usage}
             </p>
           )}
 
           <Section title="Paramètres">
-            {endpoint.params.length === 0 ? (
+            {service.params.length === 0 ? (
               <p className="text-sm text-muted">Aucun paramètre, jeton Bearer uniquement.</p>
             ) : (
               <div className="overflow-x-auto bg-surface border border-rule rounded-lg">
@@ -135,7 +134,7 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
                     </tr>
                   </thead>
                   <tbody>
-                    {endpoint.params.map((p) => (
+                    {service.params.map((p) => (
                       <tr key={`${p.in}-${p.name}`}>
                         <td className="font-mono text-ink whitespace-nowrap">{p.name}</td>
                         <td className="text-muted whitespace-nowrap">{paramInLabel[p.in]}</td>
@@ -159,11 +158,11 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
 
           <div className="grid xl:grid-cols-2 gap-7">
             <Section title="Requête">
-              <pre className="codeblock">{endpoint.requestExample}</pre>
+              <pre className="codeblock">{service.request_example}</pre>
             </Section>
-            <Section title={endpoint.success.length > 1 ? "Réponses en cas de succès" : "Réponse en cas de succès"}>
+            <Section title={service.success_examples.length > 1 ? "Réponses en cas de succès" : "Réponse en cas de succès"}>
               <div className="space-y-3">
-                {endpoint.success.map((s, i) => (
+                {service.success_examples.map((s, i) => (
                   <div key={i}>
                     {s.label && <div className="text-xs text-muted mb-1">{s.label}</div>}
                     <pre className="codeblock">{JSON.stringify(s.body, null, 2)}</pre>
@@ -173,7 +172,7 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
             </Section>
           </div>
 
-          <Disclosure label={`Champs de la réponse (${endpoint.responseFields.length})`} className="">
+          <Disclosure label={`Champs de la réponse (${service.response_fields.length})`} className="">
             <div className="overflow-x-auto bg-surface border border-rule rounded-lg">
               <table className="ledger">
                 <thead>
@@ -184,7 +183,7 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
                   </tr>
                 </thead>
                 <tbody>
-                  {endpoint.responseFields.map((f) => (
+                  {service.response_fields.map((f) => (
                     <tr key={f.name}>
                       <td className="font-mono text-xs text-ink">{f.name}</td>
                       <td className="font-mono text-xs text-muted whitespace-nowrap">{f.type}</td>
@@ -198,7 +197,7 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
 
           <Section title="Erreurs">
             <div className="space-y-3">
-              {endpoint.errors.map((e, i) => (
+              {service.errors.map((e, i) => (
                 <div key={i}>
                   <div className="text-xs text-muted mb-1">
                     Status: <Code code={e.status} />
@@ -210,7 +209,7 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
                       </>
                     )}
                   </div>
-                  <pre className="codeblock">{JSON.stringify(errorBody(e, endpoint.envelope), null, 2)}</pre>
+                  <pre className="codeblock">{JSON.stringify(errorBody(e, service.envelope), null, 2)}</pre>
                 </div>
               ))}
             </div>
@@ -221,13 +220,13 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
                   <thead>
                     <tr>
                       <th>HTTP</th>
-                      <th>{endpoint.envelope === "jsonrpc" ? "result.status" : "customstatus"}</th>
+                      <th>{service.envelope === "jsonrpc" ? "result.status" : "customstatus"}</th>
                       <th>Message</th>
                       <th>Quand</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {endpoint.errors.map((e, i) => (
+                    {service.errors.map((e, i) => (
                       <tr key={i}>
                         <td>
                           <Code code={e.status} />
@@ -245,10 +244,10 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
             </Disclosure>
           </Section>
 
-          {endpoint.notes && endpoint.notes.length > 0 && (
+          {service.notes.length > 0 && (
             <Section title="À savoir">
               <ul className="space-y-1.5 text-sm text-ink max-w-prose">
-                {endpoint.notes.map((n, i) => (
+                {service.notes.map((n, i) => (
                   <li key={i} className="flex gap-3">
                     <span className="text-accent shrink-0" aria-hidden="true">
                       •
@@ -265,52 +264,56 @@ function EndpointRow({ endpoint, expanded, onToggle }: { endpoint: Endpoint; exp
   );
 }
 
-export default function ApiDocumentation() {
-  const [activeCategory, setActiveCategory] = useState<CategoryKey>("signup");
-  const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null);
+export default function ServicesPage() {
+  const { data, error, loading } = useApi<{ categories: ServiceCategory[] }>("/docs/services");
+  const categories = useMemo(() => data?.categories ?? [], [data]);
+  const allServices = useMemo(() => categories.flatMap((c) => c.services), [categories]);
+
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [expandedService, setExpandedService] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
 
   const term = searchTerm.trim().toLowerCase();
-  const matches = (ep: Endpoint) =>
+  const matches = (ep: Service) =>
     !term ||
     ep.path.toLowerCase().includes(term) ||
     ep.summary.toLowerCase().includes(term) ||
     ep.params.some((p) => p.name.toLowerCase().includes(term)) ||
-    ep.responseFields.some((f) => f.name.toLowerCase().includes(term)) ||
+    ep.response_fields.some((f) => f.name.toLowerCase().includes(term)) ||
     ep.errors.some((e) => e.message.toLowerCase().includes(term));
 
-  const filteredEndpoints = allEndpoints.filter((ep) => (term ? matches(ep) : ep.category === activeCategory));
+  const category = categories.find((c) => c.code === activeCategory) ?? categories[0];
+  const filteredServices = term ? allServices.filter(matches) : (category?.services ?? []);
 
-  // Lien profond /#endpoint-<id> (depuis les parcours) : ouvrir la bonne categorie et deplier la fiche.
+  // Lien profond /#service-<code> (depuis les parcours) : ouvrir la bonne categorie et
+  // deplier la fiche, une fois les services charges.
   useEffect(() => {
+    if (!allServices.length) return;
     const openFromHash = () => {
-      if (!window.location.hash.startsWith("#endpoint-")) return;
-      const id = window.location.hash.replace(/^#endpoint-/, "");
-      const ep = allEndpoints.find((e) => e.id === id);
+      if (!window.location.hash.startsWith("#service-")) return;
+      const code = window.location.hash.replace(/^#service-/, "");
+      const ep = allServices.find((e) => e.code === code);
       if (!ep) return;
       setSearchTerm("");
       setActiveCategory(ep.category);
-      setExpandedEndpoint(ep.id);
+      setExpandedService(ep.code);
       setTimeout(() => {
-        document.getElementById(`endpoint-${ep.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById(`service-${ep.code}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 50);
     };
     openFromHash();
     window.addEventListener("hashchange", openFromHash);
     return () => window.removeEventListener("hashchange", openFromHash);
-  }, []);
-
-  const category = categories[activeCategory];
-  const countByCategory = (key: CategoryKey) => allEndpoints.filter((e) => e.category === key).length;
+  }, [allServices]);
 
   const aside = (
     <>
       <div className="mb-6">
-        <label htmlFor="endpoint-search" className="label block mb-2">
+        <label htmlFor="service-search" className="label block mb-2">
           Rechercher
         </label>
         <input
-          id="endpoint-search"
+          id="service-search"
           type="search"
           placeholder="chemin, champ, message…"
           className="w-full bg-surface border border-rule rounded-md px-3 py-2 text-sm placeholder:text-faint focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -319,23 +322,31 @@ export default function ApiDocumentation() {
         />
       </div>
       <AsideGroup title="Catégories">
-        {(Object.keys(categories) as CategoryKey[]).map((key) => (
+        {categories.map((c) => (
           <AsideItem
-            key={key}
-            active={activeCategory === key && !term}
+            key={c.code}
+            active={category?.code === c.code && !term}
             onClick={() => {
               setSearchTerm("");
-              setActiveCategory(key);
-              setExpandedEndpoint(null);
+              setActiveCategory(c.code);
+              setExpandedService(null);
             }}
-            hint={String(countByCategory(key))}
+            hint={String(c.services.length)}
           >
-            {categories[key].name}
+            {c.name}
           </AsideItem>
         ))}
       </AsideGroup>
     </>
   );
+
+  if (!data) {
+    return (
+      <Shell>
+        <LoadState loading={loading} error={error} skeleton={<ServicesSkeleton />} />
+      </Shell>
+    );
+  }
 
   return (
     <Shell aside={aside}>
@@ -343,17 +354,19 @@ export default function ApiDocumentation() {
         <div className="mb-6 rounded-lg bg-blue-50 px-5 py-4">
           <h1 className="text-2xl font-semibold text-blue-900">Recherche</h1>
           <p className="text-blue-800 mt-1">
-            {filteredEndpoints.length} endpoint{filteredEndpoints.length > 1 ? "s" : ""} pour « {searchTerm} », toutes catégories confondues.
+            {filteredServices.length} service{filteredServices.length > 1 ? "s" : ""} pour « {searchTerm} », toutes catégories confondues.
           </p>
         </div>
       ) : (
-        <div className="mb-6 rounded-lg bg-blue-50 px-5 py-4">
-          <h1 className="text-2xl font-semibold text-blue-900">{category.name}</h1>
-          <p className="text-blue-800 mt-1 max-w-prose">{category.description}</p>
-        </div>
+        category && (
+          <div className="mb-6 rounded-lg bg-blue-50 px-5 py-4">
+            <h1 className="text-2xl font-semibold text-blue-900">{category.name}</h1>
+            <p className="text-blue-800 mt-1 max-w-prose">{category.description}</p>
+          </div>
+        )
       )}
 
-      {!term && activeCategory === "signup" && (
+      {!term && category === categories[0] && (
         <div className="mb-8 text-sm text-ink max-w-prose space-y-2">
           <p>
             <span className="text-muted">Conventions.</span> Sauf mention contraire, chaque appel envoie{" "}
@@ -369,17 +382,17 @@ export default function ApiDocumentation() {
       )}
 
       <div className="bg-surface border border-rule rounded-lg shadow-sm overflow-hidden">
-        {filteredEndpoints.length > 0 ? (
-          filteredEndpoints.map((endpoint) => (
-            <EndpointRow
-              key={endpoint.id}
-              endpoint={endpoint}
-              expanded={expandedEndpoint === endpoint.id}
-              onToggle={() => setExpandedEndpoint(expandedEndpoint === endpoint.id ? null : endpoint.id)}
+        {filteredServices.length > 0 ? (
+          filteredServices.map((service) => (
+            <ServiceRow
+              key={service.code}
+              service={service}
+              expanded={expandedService === service.code}
+              onToggle={() => setExpandedService(expandedService === service.code ? null : service.code)}
             />
           ))
         ) : (
-          <p className="px-4 py-10 text-muted">Aucun endpoint ne correspond. Essayez un autre terme.</p>
+          <p className="px-4 py-10 text-muted">Aucun service ne correspond. Essayez un autre terme.</p>
         )}
       </div>
     </Shell>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import AuthGate from "./components/AuthGate";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -21,20 +22,20 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NKEZEFUU API",
-  description: "Guide d'intégration de l'API mobile NKEZEFUU : endpoints, parcours et cas de test",
+  title: "NKEZEFUU Docs",
+  description: "Documentation de l'API mobile NKEZEFUU et recette de l'application : services, parcours, cas de test",
   openGraph: {
     type: "website",
-    url: "https://api-docs.nkezefuu.com",
-    title: "NKEZEFUU API",
-    description: "Guide d'intégration de l'API mobile NKEZEFUU : endpoints, parcours et cas de test",
-    images: ["https://api-docs.nkezefuu.com/social-preview.jpeg"],
+    url: "https://apps-docs.nkezefuu.com",
+    title: "NKEZEFUU Docs",
+    description: "Documentation de l'API mobile NKEZEFUU et recette de l'application : services, parcours, cas de test",
+    images: ["https://apps-docs.nkezefuu.com/social-preview.jpeg"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "NKEZEFUU API",
-    description: "Guide d'intégration de l'API mobile NKEZEFUU : endpoints, parcours et cas de test",
-    images: ["https://api-docs.nkezefuu.com/social-preview.jpeg"],
+    title: "NKEZEFUU Docs",
+    description: "Documentation de l'API mobile NKEZEFUU et recette de l'application : services, parcours, cas de test",
+    images: ["https://apps-docs.nkezefuu.com/social-preview.jpeg"],
   },
 };
 
@@ -46,7 +47,9 @@ export default function RootLayout({
   return (
     // Sur <html> et pas <body> : les tokens :root de globals.css les referencent.
     <html lang="fr" className={`${bricolage.variable} ${plexSans.variable} ${plexMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <AuthGate>{children}</AuthGate>
+      </body>
     </html>
   );
 }

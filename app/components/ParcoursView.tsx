@@ -1,42 +1,39 @@
 "use client";
 import Link from "next/link";
-import { allEndpoints } from "../data";
-import type { Parcours, RuleRow, ScreenField, Step, StepBlock } from "../data/parcours";
+import { createContext, useContext, useMemo } from "react";
+import type { Journey, JourneyStep, RuleRow, ScreenField, Service, ServiceCategory, StepBlock } from "../lib/types";
+import { useApi } from "../lib/useApi";
 
-const endpointById = new Map(allEndpoints.map((e) => [e.id, e]));
+// Services cites par les blocs ecran, pour afficher leur methode et leur chemin.
+const ServicesContext = createContext<Map<string, Service>>(new Map());
 
 const stepAnchor = (num: string) => `s${num.replace(/\./g, "-")}`;
 
-// Numero de chaque etape portant un ref, pour resoudre les renvois {{ref}} du texte.
-function collectRefs(steps: Step[], prefix = ""): Map<string, string> {
-  const map = new Map<string, string>();
-  steps.forEach((step, i) => {
-    const num = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
-    if (step.ref) map.set(step.ref, num);
-    for (const [k, v] of collectRefs(step.children ?? [], num)) map.set(k, v);
-  });
+// Numero de chaque etape par cle, pour resoudre les renvois {{cle}} du texte. Le numero
+// est calcule par l'API.
+function collectRefs(steps: JourneyStep[], map = new Map<string, string>()): Map<string, string> {
+  for (const step of steps) {
+    map.set(step.key, step.number);
+    collectRefs(step.steps, map);
+  }
   return map;
 }
 
-function collectRuleIds(steps: Step[]): Set<string> {
-  const ids = new Set<string>();
-  const walk = (list: Step[]) => {
-    for (const step of list) {
-      for (const block of step.blocks ?? []) {
-        if (block.kind === "rules") for (const row of block.rows) ids.add(row.id);
-      }
-      walk(step.children ?? []);
+function collectRuleIds(steps: JourneyStep[], ids = new Set<string>()): Set<string> {
+  for (const step of steps) {
+    for (const block of step.blocks) {
+      if (block.kind === "rules") for (const row of block.rows) ids.add(row.id);
     }
-  };
-  walk(steps);
+    collectRuleIds(step.steps, ids);
+  }
   return ids;
 }
 
 function EndpointLink({ id }: { id: string }) {
-  const ep = endpointById.get(id);
+  const ep = useContext(ServicesContext).get(id);
   if (!ep) return <code className="text-xs">{id}</code>;
   return (
-    <Link href={`/#endpoint-${ep.id}`} className="inline-flex items-baseline gap-1.5 text-xs font-mono prose-link" title={ep.summary}>
+    <Link href={`/#service-${ep.code}`} className="inline-flex items-baseline gap-1.5 text-xs font-mono prose-link" title={ep.summary}>
       <span className={`font-medium ${ep.method === "GET" ? "text-get" : "text-post"}`}>{ep.method}</span>
       <span>{ep.path.replace("/api/auth/", "")}</span>
     </Link>
@@ -167,27 +164,27 @@ function Block({ block }: { block: StepBlock }) {
   return <RulesTable title={block.title} rows={block.rows} />;
 }
 
-// Arbre numerote : le numero calcule (1, 2, 2.1, 2.1.1...) tient lieu de puce, les
-// tableaux de l'etape viennent juste sous sa phrase, et les sous-etapes sont decalees
-// derriere un filet vertical qui materialise la branche.
-function StepList({ steps, refs, prefix = "" }: { steps: Step[]; refs: Map<string, string>; prefix?: string }) {
+// Arbre numerote : le numero (1, 2, 2.1, 2.1.1...) tient lieu de puce, les tableaux de
+// l'etape viennent juste sous sa phrase, et les sous-etapes sont decalees derriere un
+// filet vertical qui materialise la branche.
+function StepList({ steps, refs, nested = false }: { steps: JourneyStep[]; refs: Map<string, string>; nested?: boolean }) {
   return (
-    <ol className={prefix ? "mt-4 space-y-4 border-l border-rule pl-4" : "space-y-7"}>
-      {steps.map((step, i) => {
-        const num = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
+    <ol className={nested ? "mt-4 space-y-4 border-l border-rule pl-4" : "space-y-7"}>
+      {steps.map((step) => {
+        const num = step.number;
         return (
           <li key={num} id={stepAnchor(num)} className="scroll-mt-6 flex gap-3">
             <span className="font-mono text-sm text-accent tabular-nums shrink-0 pt-0.5">{num}</span>
             <div className="min-w-0 flex-1">
               <StepText text={step.text} refs={refs} />
-              {step.blocks && step.blocks.length > 0 && (
+              {step.blocks.length > 0 && (
                 <div className="mt-3 space-y-4">
                   {step.blocks.map((b, j) => (
                     <Block key={j} block={b} />
                   ))}
                 </div>
               )}
-              {step.children && step.children.length > 0 && <StepList steps={step.children} refs={refs} prefix={num} />}
+              {step.steps.length > 0 && <StepList steps={step.steps} refs={refs} nested />}
             </div>
           </li>
         );
@@ -213,84 +210,92 @@ function TestDisclosure({ count, children }: { count: number; children: React.Re
   );
 }
 
-export default function ParcoursView({ parcours }: { parcours: Parcours }) {
-  const refs = collectRefs(parcours.steps);
-  const constraintIds = collectRuleIds(parcours.steps);
-  const testCaseCount = parcours.testGroups.reduce((n, g) => n + g.cases.length, 0);
+export default function ParcoursView({ journey }: { journey: Journey }) {
+  const refs = collectRefs(journey.steps);
+  const constraintIds = collectRuleIds(journey.steps);
+  const testCaseCount = journey.api_tests.reduce((n, g) => n + g.cases.length, 0);
+
+  const { data } = useApi<{ categories: ServiceCategory[] }>("/docs/services");
+  const services = useMemo(
+    () => new Map((data?.categories ?? []).flatMap((c) => c.services).map((s) => [s.code, s])),
+    [data],
+  );
 
   return (
-    <div className="space-y-10">
-      <header className="rounded-lg bg-blue-50 px-5 py-4">
-        <h1 className="text-2xl font-semibold text-blue-900">{parcours.title}</h1>
-        <p className="text-blue-900 mt-2">
-          <span className="label text-blue-700">utilisateur concerné </span>
-          {parcours.userLine}
-        </p>
-      </header>
-
-      <StepList steps={parcours.steps} refs={refs} />
-
-      <section className="pt-2">
-        <TestDisclosure count={testCaseCount}>
-          <p className="text-sm text-muted -mt-1 mb-4 max-w-prose">
-            Un cas par contrainte et par situation : nominal, limite, violation. La colonne C renvoie à la règle
-            correspondante plus haut quand elle y figure.
+    <ServicesContext.Provider value={services}>
+      <div className="space-y-10">
+        <header className="rounded-lg bg-blue-50 px-5 py-4">
+          <h1 className="text-2xl font-semibold text-blue-900">{journey.name}</h1>
+          <p className="text-blue-900 mt-2">
+            <span className="label text-blue-700">utilisateur concerné </span>
+            {journey.audience}
           </p>
-          <div className="space-y-8">
-            {parcours.testGroups.map((g) => (
-              <div key={g.title}>
-                <h3 className="font-semibold text-ink mb-2">{g.title}</h3>
-                <div className="overflow-x-auto border border-rule rounded-lg">
-                  <table className="ledger">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>C</th>
-                        <th>Cas</th>
-                        <th>Étant donné</th>
-                        <th>Action</th>
-                        <th>Résultat attendu</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {g.cases.map((t) => (
-                        <tr key={t.id}>
-                          <td className="font-mono text-xs text-muted whitespace-nowrap">{t.id}</td>
-                          <td className="font-mono text-xs whitespace-nowrap">
-                            {t.constraintId ? <ConstraintRef id={t.constraintId} known={constraintIds.has(t.constraintId)} /> : <span className="text-faint">–</span>}
-                          </td>
-                          <td className="text-ink font-medium">{t.title}</td>
-                          <td className="text-ink">{t.given}</td>
-                          <td className="font-mono text-xs text-ink">{t.when}</td>
-                          <td className="text-ink">
-                            {t.then}
-                            {t.expected && (
-                              <div className="mt-1.5 text-xs">
-                                <span
-                                  className={`font-mono px-1.5 py-px rounded-sm ${
-                                    t.expected.customstatus < 300
-                                      ? "bg-ok-soft text-ok"
-                                      : t.expected.customstatus < 500
-                                        ? "bg-warn-soft text-warn"
-                                        : "bg-err-soft text-err"
-                                  }`}
-                                >
-                                  {t.expected.customstatus}
-                                </span>
-                                {t.expected.message && <code className="block mt-1 whitespace-pre-wrap text-muted">{t.expected.message}</code>}
-                              </div>
-                            )}
-                          </td>
+        </header>
+
+        <StepList steps={journey.steps} refs={refs} />
+
+        <section className="pt-2">
+          <TestDisclosure count={testCaseCount}>
+            <p className="text-sm text-muted -mt-1 mb-4 max-w-prose">
+              Un cas par contrainte et par situation : nominal, limite, violation. La colonne C renvoie à la règle
+              correspondante plus haut quand elle y figure.
+            </p>
+            <div className="space-y-8">
+              {journey.api_tests.map((g) => (
+                <div key={g.title}>
+                  <h3 className="font-semibold text-ink mb-2">{g.title}</h3>
+                  <div className="overflow-x-auto border border-rule rounded-lg">
+                    <table className="ledger">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>C</th>
+                          <th>Cas</th>
+                          <th>Étant donné</th>
+                          <th>Action</th>
+                          <th>Résultat attendu</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {g.cases.map((t) => (
+                          <tr key={t.code}>
+                            <td className="font-mono text-xs text-muted whitespace-nowrap">{t.code}</td>
+                            <td className="font-mono text-xs whitespace-nowrap">
+                              {t.constraint ? <ConstraintRef id={t.constraint} known={constraintIds.has(t.constraint)} /> : <span className="text-faint">–</span>}
+                            </td>
+                            <td className="text-ink font-medium">{t.title}</td>
+                            <td className="text-ink">{t.given}</td>
+                            <td className="font-mono text-xs text-ink">{t.when}</td>
+                            <td className="text-ink">
+                              {t.then}
+                              {t.expected && (
+                                <div className="mt-1.5 text-xs">
+                                  <span
+                                    className={`font-mono px-1.5 py-px rounded-sm ${
+                                      t.expected.customstatus < 300
+                                        ? "bg-ok-soft text-ok"
+                                        : t.expected.customstatus < 500
+                                          ? "bg-warn-soft text-warn"
+                                          : "bg-err-soft text-err"
+                                    }`}
+                                  >
+                                    {t.expected.customstatus}
+                                  </span>
+                                  {t.expected.message && <code className="block mt-1 whitespace-pre-wrap text-muted">{t.expected.message}</code>}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </TestDisclosure>
-      </section>
-    </div>
+              ))}
+            </div>
+          </TestDisclosure>
+        </section>
+      </div>
+    </ServicesContext.Provider>
   );
 }
