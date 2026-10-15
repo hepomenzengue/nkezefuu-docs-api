@@ -16,6 +16,9 @@ import { Button, Dialog, ErrorMessage, Field, StatusPill, TextArea } from "./ui"
 type JourneyData = { version: AcceptanceVersion; journey: AcceptanceJourney; steps: AcceptanceStep[] };
 
 const openKey = (code: string) => `nkezefuu-recette-open-${code}`;
+// Profils choisis dans le filtre : communs a tous les parcours, pour que le testeur garde
+// le compte avec lequel il est connecte en passant d'un parcours a l'autre.
+const PROFILES_KEY = "nkezefuu-recette-profiles";
 
 function readStored<T>(key: string, fallback: T): T {
   try {
@@ -44,6 +47,7 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
 
   const [awaitingFilters, setAwaitingFilters] = useState<string[]>([]);
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [profileFilters, setProfileFilters] = useState<string[]>([]);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [openCaseId, setOpenCaseId] = useState<number | null>(null);
   const [flagStep, setFlagStep] = useState<AcceptanceStep | null>(null);
@@ -58,6 +62,17 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
     setChosen(readStored(openKey(code), {}));
   }, [code]);
 
+  useEffect(() => {
+    setProfileFilters(readStored(PROFILES_KEY, []));
+  }, []);
+
+  const toggleProfile = (profile: string) =>
+    setProfileFilters((current) => {
+      const next = toggle(current, profile);
+      writeStored(PROFILES_KEY, next);
+      return next;
+    });
+
   const query = new URLSearchParams();
   if (versionId) query.set("version", versionId);
   if (awaitingFilters.length) query.set("awaiting", awaitingFilters.join(","));
@@ -68,14 +83,25 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
   const path = `/journeys/${encodeURIComponent(code)}${queryString ? `?${queryString}` : ""}`;
 
   const { data, error, loading, reload, setData } = useLive<JourneyData>(path);
-  const visibleSteps = (data?.steps ?? []).filter((step) => step.cases.length > 0);
-  const filtered = awaitingFilters.length > 0 || statusCodes.length > 0;
+  // Le profil se filtre ici, sur les cas deja recus. Les profils proposes sont ceux des
+  // cas du parcours, plus ceux deja choisis : un profil retenu d'un autre parcours reste
+  // visible, pour comprendre pourquoi aucun cas ne s'affiche et pouvoir le retirer.
+  const profiles = Array.from(
+    new Set([...(data?.steps ?? []).flatMap((step) => step.cases.map((c) => c.user_profile)), ...profileFilters]),
+  )
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "fr"));
+  const steps = (data?.steps ?? []).map((step) =>
+    profileFilters.length ? { ...step, cases: step.cases.filter((c) => profileFilters.includes(c.user_profile)) } : step,
+  );
+  const visibleSteps = steps.filter((step) => step.cases.length > 0);
+  const filtered = awaitingFilters.length > 0 || statusCodes.length > 0 || profileFilters.length > 0;
   const readOnly = data?.version.state.code === "published";
-
+  const profileKey = profileFilters.join("|");
 
   useEffect(() => {
     setFilteredOpen({});
-  }, [queryString]);
+  }, [queryString, profileKey]);
 
   const isOpen = (step: AcceptanceStep) => (filtered ? (filteredOpen[step.key] ?? true) : (chosen[step.key] ?? false));
 
@@ -163,6 +189,16 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
                 </FilterChip>
               ))}
             </div>
+            {profiles.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-muted mr-1">Profil</span>
+                {profiles.map((profile) => (
+                  <FilterChip key={profile} active={profileFilters.includes(profile)} onClick={() => toggleProfile(profile)}>
+                    {profile}
+                  </FilterChip>
+                ))}
+              </div>
+            )}
             {isAdmin && (
               <label className="inline-flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
@@ -204,7 +240,8 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
                 open={isOpen(step)}
                 onToggle={() => setOpen([step.key], !isOpen(step))}
                 canFlag={!readOnly && isTester && step.cases.some((c) => c.active && c.result.code === "not_tested")}
-                onFlag={() => setFlagStep(step)}
+                // Le signalement porte sur tous les cas non testes de l'etape, quel que soit le profil filtre
+                onFlag={() => setFlagStep(data.steps.find((s) => s.id === step.id) ?? step)}
                 onOpenCase={setOpenCaseId}
                 onCaseChanged={replaceCase}
                 onRegression={() => reload({ quiet: true })}
