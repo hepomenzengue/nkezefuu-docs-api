@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { api, ApiError } from "../../lib/api";
-import { FIX_STATUS_LABELS, FIX_STATUSES_WITHOUT_TEXT, RESULT_LABELS, RESULTS_REQUIRING_OBSERVATION, quickTone } from "../../lib/recette";
+import { FIX_STATUS_LABELS, FIX_STATUSES_WITHOUT_TEXT, OBSERVATION_LABELS, RESULT_LABELS, RESULTS_REQUIRING_OBSERVATION, quickTone } from "../../lib/recette";
 import type { AcceptanceCase } from "../../lib/types";
 import { Button, ErrorMessage, TextArea } from "./ui";
 
@@ -36,8 +36,7 @@ function needsText(action: CaseAction): boolean {
 
 function textLabel(action: CaseAction): string {
   if (action.kind === "reply") return "Réponse au testeur";
-  if (action.code === "postponed") return "Motif du report";
-  return "Résultat observé";
+  return OBSERVATION_LABELS[action.code] ?? "Résultat observé";
 }
 
 const actionTone = (action: CaseAction) => (action.kind === "reply" ? "text-warn hover:bg-warn-soft" : quickTone(action.code));

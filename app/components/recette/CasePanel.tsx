@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, ApiError } from "../../lib/api";
-import { AWAITING_TONES, formatDate } from "../../lib/recette";
+import { AWAITING_TONES, OBSERVATION_LABELS, formatDate } from "../../lib/recette";
 import type { AcceptanceCase, AcceptanceStep, CaseLink, HistoryEntry } from "../../lib/types";
 import { Bone } from "../Skeleton";
 import { ActionButtons, ActionForm, availableActions, useCaseAction } from "./StatusActions";
@@ -127,7 +127,7 @@ export default function CasePanel({
                   <StatusPill code={item.result.code} label={item.result.label} />
                 </Line>
                 {item.observed_result && (
-                  <Line label={item.result.code === "postponed" ? "Motif du report" : "Résultat observé"}>{item.observed_result}</Line>
+                  <Line label={OBSERVATION_LABELS[item.result.code] ?? "Résultat observé"}>{item.observed_result}</Line>
                 )}
                 {item.tested_by && (
                   <Line label="Testé par">

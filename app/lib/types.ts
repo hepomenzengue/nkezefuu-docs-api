@@ -127,6 +127,7 @@ export type Counters = {
   total: number;
   not_tested: number;
   passed: number;
+  passed_with_reserve: number;
   failed: number;
   regression: number;
   blocked: number;

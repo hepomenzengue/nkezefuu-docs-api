@@ -439,6 +439,12 @@ function CaseRow({
         <td className="text-ink align-top">{item.expected_result}</td>
         <td className="align-top">
           <StatusPill code={item.result.code} label={item.result.label} />
+          {/* Debut du resultat observe (ou de la reserve, du motif) : le texte complet est dans la fiche du cas */}
+          {item.observed_result && (
+            <span className="block text-xs text-muted mt-1 max-w-[14rem] line-clamp-2" title={item.observed_result}>
+              {item.observed_result}
+            </span>
+          )}
           {item.fix_status && <span className="block text-xs text-warn mt-1">{item.fix_status.label}</span>}
         </td>
         <td className={`align-top whitespace-nowrap text-sm ${AWAITING_TONES[item.awaiting.code] ?? ""}`}>{item.awaiting.label}</td>

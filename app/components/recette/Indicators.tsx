@@ -6,6 +6,7 @@ const ITEMS: { key: keyof Counters; label: string; tone: string }[] = [
   { key: "total", label: "Cas de test", tone: "text-ink" },
   { key: "not_tested", label: "Non testés", tone: "text-gray-600" },
   { key: "passed", label: "Conformes", tone: "text-ok" },
+  { key: "passed_with_reserve", label: "Avec réserve", tone: "text-orange-800" },
   { key: "failed", label: "Non conformes", tone: "text-err" },
   { key: "regression", label: "Régressions", tone: "text-err" },
   { key: "blocked", label: "Bloqués", tone: "text-warn" },

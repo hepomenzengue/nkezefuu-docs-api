@@ -13,6 +13,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const RESULT_LABELS: Record<string, string> = {
   not_tested: "Non testé",
   passed: "Conforme",
+  passed_with_reserve: "Conforme avec réserve",
   passed_after_fix: "Conforme après correction",
   failed: "Non conforme",
   still_failing: "Toujours non conforme",
@@ -30,14 +31,20 @@ export const FIX_STATUS_LABELS: Record<string, string> = {
 };
 
 // Memes regles que le serveur, pour guider la saisie : le serveur reste juge.
-// Pour un report, le texte demande est le motif.
-export const RESULTS_REQUIRING_OBSERVATION = ["failed", "still_failing", "regression", "blocked", "not_implemented", "postponed"];
+// Pour un report, le texte demande est le motif ; pour une conformite avec reserve, la reserve.
+export const RESULTS_REQUIRING_OBSERVATION = ["passed_with_reserve", "failed", "still_failing", "regression", "blocked", "not_implemented", "postponed"];
+// Libelle du texte porte par un resultat, quand ce n'est pas un resultat observe.
+export const OBSERVATION_LABELS: Record<string, string> = {
+  postponed: "Motif du report",
+  passed_with_reserve: "Réserve",
+};
 export const FIX_STATUSES_WITHOUT_TEXT = ["in_progress", "fixed_to_retest"];
 
 // Filtre « Statut » de la recette d'un parcours : un choix peut regrouper plusieurs codes.
 export const STATUS_FILTERS: { label: string; codes: string[] }[] = [
   { label: "Non testé", codes: ["not_tested"] },
   { label: "Conforme", codes: ["passed", "passed_after_fix"] },
+  { label: "Conforme avec réserve", codes: ["passed_with_reserve"] },
   { label: "Non conforme", codes: ["failed", "still_failing"] },
   { label: "Régression", codes: ["regression"] },
   { label: "Bloqué", codes: ["blocked"] },
@@ -49,6 +56,7 @@ const RESULT_TONES: Record<string, string> = {
   not_tested: "bg-gray-100 text-gray-700",
   passed: "bg-ok-soft text-ok",
   passed_after_fix: "bg-ok-soft text-ok",
+  passed_with_reserve: "bg-orange-100 text-orange-800",
   failed: "bg-err-soft text-err",
   still_failing: "bg-err-soft text-err",
   regression: "bg-err-soft text-err",
@@ -64,6 +72,7 @@ export const resultTone = (code: string) => RESULT_TONES[code] ?? "bg-gray-100 t
 const ROW_MARKS: Record<string, string> = {
   passed: "shadow-[inset_3px_0_0_var(--ok)]",
   passed_after_fix: "shadow-[inset_3px_0_0_var(--ok)]",
+  passed_with_reserve: "shadow-[inset_3px_0_0_#ea580c]",
   failed: "shadow-[inset_3px_0_0_var(--err)]",
   still_failing: "shadow-[inset_3px_0_0_var(--err)]",
   regression: "shadow-[inset_3px_0_0_var(--err)]",
@@ -78,6 +87,7 @@ export const rowMark = (code: string) => ROW_MARKS[code] ?? "";
 const QUICK_TONES: Record<string, string> = {
   passed: "text-ok hover:bg-ok-soft",
   passed_after_fix: "text-ok hover:bg-ok-soft",
+  passed_with_reserve: "text-orange-800 hover:bg-orange-50",
   failed: "text-err hover:bg-err-soft",
   still_failing: "text-err hover:bg-err-soft",
   regression: "text-err hover:bg-err-soft",
