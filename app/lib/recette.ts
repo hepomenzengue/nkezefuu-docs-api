@@ -2,7 +2,7 @@
 // faut les proposer avant d'avoir un cas sous la main (filtres, listes de choix), et
 // couleurs des statuts. Les libelles des cas eux-memes viennent de l'API.
 
-import type { Role } from "./types";
+import type { AcceptanceCase, Counters, Role } from "./types";
 
 export const ROLE_LABELS: Record<Role, string> = {
   tester: "Testeur",
@@ -117,4 +117,24 @@ export function recetteHref(versionId: number | string | null, code?: string): s
   if (versionId) query.set("version", String(versionId));
   const queryString = query.toString();
   return `/recette/${queryString ? `?${queryString}` : ""}`;
+}
+
+// Indicateurs d'une liste de cas, avec les memes regroupements que le serveur : sert a
+// recompter une recette filtree. Les cas archives ne comptent pas, comme cote serveur.
+export function countCases(cases: AcceptanceCase[]): Counters {
+  const active = cases.filter((c) => c.active);
+  const result = (...codes: string[]) => active.filter((c) => codes.includes(c.result.code)).length;
+  return {
+    total: active.length,
+    not_tested: result("not_tested"),
+    passed: result("passed", "passed_after_fix"),
+    passed_with_reserve: result("passed_with_reserve"),
+    failed: result("failed", "still_failing"),
+    regression: result("regression"),
+    blocked: result("blocked"),
+    not_implemented: result("not_implemented"),
+    postponed: result("postponed"),
+    awaiting_tester: active.filter((c) => c.awaiting.code === "tester").length,
+    awaiting_developer: active.filter((c) => c.awaiting.code === "developer").length,
+  };
 }

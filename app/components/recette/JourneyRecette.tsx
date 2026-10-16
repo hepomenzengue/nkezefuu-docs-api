@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 import { api, ApiError } from "../../lib/api";
-import { AWAITING_TONES, STATUS_FILTERS, formatDate, recetteHref, rowMark } from "../../lib/recette";
+import { AWAITING_TONES, STATUS_FILTERS, countCases, formatDate, recetteHref, rowMark } from "../../lib/recette";
 import type { AcceptanceCase, AcceptanceJourney, AcceptanceStep, AcceptanceVersion, CaseLink } from "../../lib/types";
 import { useLive } from "../../lib/useLive";
 import { useAuth } from "../AuthGate";
@@ -97,6 +97,8 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
   const visibleSteps = steps.filter((step) => step.cases.length > 0);
   const filtered = awaitingFilters.length > 0 || statusCodes.length > 0 || profileFilters.length > 0;
   const readOnly = data?.version.state.code === "published";
+  // Sous filtre, les indicateurs comptent les cas affiches ; sinon ceux du parcours.
+  const counters = data && (filtered ? countCases(visibleSteps.flatMap((step) => step.cases)) : data.journey.counters);
   const profileKey = profileFilters.join("|");
 
   useEffect(() => {
@@ -159,7 +161,6 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
               </Link>
             </div>
             <VersionLine version={data.version} />
-            <Indicators counters={data.journey.counters} compact />
           </header>
 
           <section className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm" aria-label="Filtres">
@@ -206,6 +207,13 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
               </label>
             )}
           </section>
+
+          {counters && (
+            <div className="space-y-1">
+              {filtered && <p className="text-xs text-muted">Indicateurs des cas filtrés</p>}
+              <Indicators counters={counters} compact />
+            </div>
+          )}
 
           {error && <ErrorMessage message={error} />}
 
