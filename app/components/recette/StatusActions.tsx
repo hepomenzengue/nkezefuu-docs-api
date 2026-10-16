@@ -3,12 +3,13 @@ import { useState } from "react";
 import { api, ApiError } from "../../lib/api";
 import { FIX_STATUS_LABELS, FIX_STATUSES_WITHOUT_TEXT, OBSERVATION_LABELS, RESULT_LABELS, RESULTS_REQUIRING_OBSERVATION, quickTone } from "../../lib/recette";
 import type { AcceptanceCase } from "../../lib/types";
+import { CapturePicker, usePendingCaptures } from "./Captures";
 import { Button, ErrorMessage, TextArea } from "./ui";
 
 // Actions d'un cas sous forme de boutons de statut, communes a la ligne du tableau et
 // a la fiche du cas. Un statut qui n'a besoin d'aucun texte s'enregistre au clic ; les
-// autres ouvrent une zone de texte avec son bouton Enregistrer. Les boutons proposes
-// suivent les permissions renvoyees par l'API.
+// autres ouvrent une zone de texte avec son bouton Enregistrer, et des captures d'ecran
+// possibles. Les boutons proposes suivent les permissions renvoyees par l'API.
 
 export type CaseAction = { kind: "result" | "reply" | "regression"; code: string };
 
@@ -41,10 +42,10 @@ function textLabel(action: CaseAction): string {
 
 const actionTone = (action: CaseAction) => (action.kind === "reply" ? "text-warn hover:bg-warn-soft" : quickTone(action.code));
 
-function body(action: CaseAction, text: string) {
-  if (action.kind === "reply") return { fix_status: action.code, reply: text };
-  if (action.kind === "regression") return { observed_result: text };
-  return { result: action.code, observed_result: text };
+function body(action: CaseAction, text: string, captures: { name: string; data: string }[]) {
+  if (action.kind === "reply") return { fix_status: action.code, reply: text, captures };
+  if (action.kind === "regression") return { observed_result: text, captures };
+  return { result: action.code, observed_result: text, captures };
 }
 
 const same = (a: CaseAction | null, b: CaseAction) => a?.kind === b.kind && a.code === b.code;
@@ -56,14 +57,19 @@ export function useCaseAction(item: AcceptanceCase, onDone: (updated: Acceptance
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const captures = usePendingCaptures();
 
-  const send = async (action: CaseAction, value: string) => {
+  const send = async (action: CaseAction, value: string, attached: { name: string; data: string }[] = []) => {
     setPending(true);
     setError(null);
     try {
-      const data = await api<{ case: AcceptanceCase }>(`/cases/${item.id}/${action.kind}`, { method: "POST", body: body(action, value) });
+      const data = await api<{ case: AcceptanceCase }>(`/cases/${item.id}/${action.kind}`, {
+        method: "POST",
+        body: body(action, value, attached),
+      });
       setForm(null);
       setText("");
+      captures.clear();
       onDone(data.case, action);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Une erreur est survenue.");
@@ -77,6 +83,7 @@ export function useCaseAction(item: AcceptanceCase, onDone: (updated: Acceptance
     if (needsText(action)) {
       setForm(same(form, action) ? null : action);
       setText("");
+      captures.clear();
     } else {
       setForm(null);
       send(action, "");
@@ -90,15 +97,16 @@ export function useCaseAction(item: AcceptanceCase, onDone: (updated: Acceptance
       setError(`Renseignez le champ « ${textLabel(form)} ».`);
       return;
     }
-    send(form, text.trim());
+    send(form, text.trim(), captures.payload);
   };
 
   const cancel = () => {
     setForm(null);
     setError(null);
+    captures.clear();
   };
 
-  return { form, text, setText, error, pending, choose, submit, cancel };
+  return { form, text, setText, error, pending, choose, submit, cancel, captures };
 }
 
 export type CaseActionState = ReturnType<typeof useCaseAction>;
@@ -127,7 +135,7 @@ export function ActionButtons({ actions, state, vertical = false }: { actions: C
 export function ActionForm({ state, id, prefix }: { state: CaseActionState; id: string; prefix?: string }) {
   if (!state.form && !state.error) return null;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" {...(state.form ? state.captures.zoneProps : {})}>
       {state.form && (
         <>
           <label htmlFor={id} className="block text-sm text-ink">
@@ -135,6 +143,7 @@ export function ActionForm({ state, id, prefix }: { state: CaseActionState; id: 
             <span className="font-medium">{actionLabel(state.form)}</span> : {textLabel(state.form).toLowerCase()}
           </label>
           <TextArea id={id} autoFocus value={state.text} onChange={(e) => state.setText(e.target.value)} />
+          <CapturePicker state={state.captures} disabled={state.pending} />
         </>
       )}
       <ErrorMessage message={state.error} />

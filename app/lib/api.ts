@@ -140,6 +140,37 @@ export async function api<T>(path: string, options: { method?: "GET" | "POST"; b
   }
 }
 
+// Lecture d'un fichier (capture d'ecran) : meme jeton et meme renouvellement que api(),
+// mais le contenu est renvoye tel quel. Un refus arrive au format JSON habituel.
+async function sendBlob(path: string, token: string): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl()}${PREFIX}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new ApiError(0, "Le serveur est injoignable. Vérifiez votre connexion et réessayez.");
+  }
+  if ((response.headers.get("Content-Type") ?? "").startsWith("application/json")) {
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const status = typeof data.customstatus === "number" ? data.customstatus : response.status;
+    throw new ApiError(status, String(data.error ?? "Une erreur est survenue."));
+  }
+  if (!response.ok) throw new ApiError(response.status, "Une erreur est survenue.");
+  return response.blob();
+}
+
+export async function apiBlob(path: string): Promise<Blob> {
+  const session = readSession();
+  if (!session) throw new ApiError(401, "Authentification requise");
+  try {
+    return await sendBlob(path, session.token);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) throw error;
+    const renewed = await refresh(session);
+    if (!renewed) throw new ApiError(401, "Session expirée, reconnectez-vous");
+    return await sendBlob(path, renewed.token);
+  }
+}
+
 export async function login(identifiant: string, password: string): Promise<Session> {
   const data = await send("/auth/login", { method: "POST", body: JSON.stringify({ login: identifiant, password }) });
   const session = toSession(data);

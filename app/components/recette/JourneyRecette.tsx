@@ -486,11 +486,16 @@ function CaseRow({
           <StatusPill code={item.result.code} label={item.result.label} />
           {/* Debut du resultat observe (ou de la reserve, du motif) : le texte complet est dans la fiche du cas */}
           {item.observed_result && (
-            <span className="block text-xs text-muted mt-1 max-w-[14rem] line-clamp-2" title={item.observed_result}>
+            <span className="text-xs text-muted mt-1 max-w-[14rem] break-words line-clamp-2" title={item.observed_result}>
               {item.observed_result}
             </span>
           )}
           {item.fix_status && <span className="block text-xs text-warn mt-1">{item.fix_status.label}</span>}
+          {item.capture_count > 0 && (
+            <span className="block text-xs text-accent mt-1">
+              {item.capture_count} capture{item.capture_count > 1 ? "s" : ""}
+            </span>
+          )}
         </td>
         <td className={`align-top whitespace-nowrap text-sm ${AWAITING_TONES[item.awaiting.code] ?? ""}`}>{item.awaiting.label}</td>
         <td className="align-top cursor-default" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>

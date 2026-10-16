@@ -4,6 +4,7 @@ import { api, ApiError } from "../../lib/api";
 import { AWAITING_TONES, OBSERVATION_LABELS, formatDate } from "../../lib/recette";
 import type { AcceptanceCase, AcceptanceStep, CaseLink, HistoryEntry } from "../../lib/types";
 import { Bone } from "../Skeleton";
+import { CaptureGallery, CapturePicker, usePendingCaptures } from "./Captures";
 import { ActionButtons, ActionForm, availableActions, useCaseAction } from "./StatusActions";
 import { Button, ErrorMessage, Field, Select, StatusPill, TextArea, TextInput } from "./ui";
 
@@ -276,17 +277,23 @@ function StatusCard({ item, onReplace }: { item: AcceptanceCase; onReplace: (upd
   );
 }
 
+// Un commentaire peut n'etre qu'une capture, sans texte
 function CommentForm({ run }: { run: Run }) {
   const [text, setText] = useState("");
+  const captures = usePendingCaptures();
   const { error, pending, submit } = useSubmit(async () => {
-    await run("comment", { text: text.trim() });
+    await run("comment", { text: text.trim(), captures: captures.payload });
     setText("");
+    captures.clear();
   });
   return (
     <Card title="Ajouter un commentaire">
-      <TextArea id="comment-text" aria-label="Commentaire" value={text} onChange={(e) => setText(e.target.value)} />
+      <div className="space-y-2" {...captures.zoneProps}>
+        <TextArea id="comment-text" aria-label="Commentaire" value={text} onChange={(e) => setText(e.target.value)} />
+        <CapturePicker state={captures} disabled={pending} />
+      </div>
       <ErrorMessage message={error} />
-      <Button variant="secondary" onClick={submit} disabled={pending || !text.trim()}>
+      <Button variant="secondary" onClick={submit} disabled={pending || (!text.trim() && !captures.captures.length)}>
         Ajouter
       </Button>
     </Card>
@@ -401,6 +408,7 @@ function History({ entries }: { entries: HistoryEntry[] }) {
                     {entry.status && entry.type.code === "reply" && <span className="text-xs text-warn">{entry.status.label}</span>}
                   </div>
                   {entry.text && <p className="text-ink mt-1 whitespace-pre-line">{entry.text}</p>}
+                  <CaptureGallery captures={entry.captures ?? []} />
                   <div className="text-xs text-faint mt-1">
                     {entry.author?.name}
                     {entry.date && `, le ${formatDate(entry.date)}`}

@@ -169,6 +169,8 @@ export type CasePermissions = {
 
 export type UserRef = { id: number; name: string } | null;
 
+export type Capture = { id: number; name: string; mimetype: string };
+
 export type HistoryEntry = {
   id: number;
   iteration: number;
@@ -177,6 +179,7 @@ export type HistoryEntry = {
   text: string;
   author: UserRef;
   date: string | null;
+  captures: Capture[];
 };
 
 export type AcceptanceCase = {
@@ -195,6 +198,7 @@ export type AcceptanceCase = {
   followups: CaseLink[];
   result: Coded;
   observed_result: string;
+  capture_count: number;
   tested_by: UserRef;
   tested_at: string | null;
   fix_status: Coded | null;
