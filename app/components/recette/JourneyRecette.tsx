@@ -496,7 +496,10 @@ function CaseRow({
     }
   };
   const state = useCaseAction(item, done);
-  const actions = availableActions(item, { includeReset: false });
+  // « Modifier » se place dans la cellule du statut, a cote du texte qu'il modifie
+  const all = availableActions(item, { includeReset: false });
+  const amend = all.find((a) => a.kind === "amend");
+  const actions = all.filter((a) => a.kind !== "amend");
 
   return (
     <Fragment>
@@ -528,6 +531,17 @@ function CaseRow({
             <span className="block text-xs text-accent mt-1">
               {item.capture_count} capture{item.capture_count > 1 ? "s" : ""}
             </span>
+          )}
+          {amend && (
+            <button
+              type="button"
+              onClick={() => state.choose(amend)}
+              disabled={state.pending}
+              aria-pressed={state.form?.kind === "amend"}
+              className="block text-xs text-accent hover:text-accent-ink hover:underline mt-1 cursor-pointer disabled:opacity-50"
+            >
+              Modifier
+            </button>
           )}
         </td>
         <td className={`align-top whitespace-nowrap text-sm ${AWAITING_TONES[item.awaiting.code] ?? ""}`}>{item.awaiting.label}</td>
