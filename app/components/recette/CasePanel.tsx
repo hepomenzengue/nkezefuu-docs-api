@@ -404,7 +404,9 @@ function History({ entries }: { entries: HistoryEntry[] }) {
                 <li key={entry.id} className="text-sm">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="font-medium text-ink">{entry.type.label}</span>
-                    {entry.status && entry.type.code === "result" && <StatusPill code={entry.status.code} label={entry.status.label} />}
+                    {entry.status && ["result", "amend"].includes(entry.type.code) && (
+                      <StatusPill code={entry.status.code} label={entry.status.label} />
+                    )}
                     {entry.status && entry.type.code === "reply" && <span className="text-xs text-warn">{entry.status.label}</span>}
                   </div>
                   {entry.text && <p className="text-ink mt-1 whitespace-pre-line">{entry.text}</p>}

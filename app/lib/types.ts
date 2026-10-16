@@ -165,6 +165,7 @@ export type CasePermissions = {
   can_archive: boolean;
   can_restore: boolean;
   can_report_regression: boolean;
+  can_amend: boolean;
 };
 
 export type UserRef = { id: number; name: string } | null;

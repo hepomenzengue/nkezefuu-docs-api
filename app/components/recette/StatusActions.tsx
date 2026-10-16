@@ -11,7 +11,9 @@ import { Button, ErrorMessage, TextArea } from "./ui";
 // autres ouvrent une zone de texte avec son bouton Enregistrer, et des captures d'ecran
 // possibles. Les boutons proposes suivent les permissions renvoyees par l'API.
 
-export type CaseAction = { kind: "result" | "reply" | "regression"; code: string };
+// amend : modifier le dernier resultat (texte, captures) sans changer le statut ; son
+// code est celui du resultat en cours.
+export type CaseAction = { kind: "result" | "reply" | "regression" | "amend"; code: string };
 
 export function availableActions(item: AcceptanceCase, { includeReset }: { includeReset: boolean }): CaseAction[] {
   const p = item.permissions;
@@ -19,18 +21,21 @@ export function availableActions(item: AcceptanceCase, { includeReset }: { inclu
     ...p.allowed_results.filter((code) => includeReset || code !== "not_tested").map((code) => ({ kind: "result" as const, code })),
     ...p.allowed_fix_statuses.map((code) => ({ kind: "reply" as const, code })),
     ...(p.can_report_regression ? [{ kind: "regression" as const, code: "regression" }] : []),
+    ...(p.can_amend ? [{ kind: "amend" as const, code: item.result.code }] : []),
   ];
 }
 
 export function actionLabel(action: CaseAction): string {
   if (action.kind === "regression") return "Signaler une régression";
+  if (action.kind === "amend") return "Modifier";
   if (action.kind === "reply") return FIX_STATUS_LABELS[action.code] ?? action.code;
   if (action.code === "not_tested") return "Remettre à « Non testé »";
   return RESULT_LABELS[action.code] ?? action.code;
 }
 
-function needsText(action: CaseAction): boolean {
-  if (action.kind === "regression") return true;
+// Ouvre un formulaire (texte, captures) au lieu d'enregistrer au clic
+function opensForm(action: CaseAction): boolean {
+  if (action.kind === "regression" || action.kind === "amend") return true;
   if (action.kind === "reply") return !FIX_STATUSES_WITHOUT_TEXT.includes(action.code);
   return RESULTS_REQUIRING_OBSERVATION.includes(action.code);
 }
@@ -40,11 +45,16 @@ function textLabel(action: CaseAction): string {
   return OBSERVATION_LABELS[action.code] ?? "Résultat observé";
 }
 
-const actionTone = (action: CaseAction) => (action.kind === "reply" ? "text-warn hover:bg-warn-soft" : quickTone(action.code));
+const actionTone = (action: CaseAction) =>
+  action.kind === "reply" ? "text-warn hover:bg-warn-soft" : action.kind === "amend" ? "text-ink hover:bg-gray-50" : quickTone(action.code);
+
+// Le texte est exige, sauf pour modifier un resultat qui n'en demande pas (Conforme)
+const textRequired = (action: CaseAction) =>
+  action.kind !== "amend" || RESULTS_REQUIRING_OBSERVATION.includes(action.code);
 
 function body(action: CaseAction, text: string, captures: { name: string; data: string }[]) {
   if (action.kind === "reply") return { fix_status: action.code, reply: text, captures };
-  if (action.kind === "regression") return { observed_result: text, captures };
+  if (action.kind === "regression" || action.kind === "amend") return { observed_result: text, captures };
   return { result: action.code, observed_result: text, captures };
 }
 
@@ -80,9 +90,10 @@ export function useCaseAction(item: AcceptanceCase, onDone: (updated: Acceptance
 
   const choose = (action: CaseAction) => {
     setError(null);
-    if (needsText(action)) {
+    if (opensForm(action)) {
       setForm(same(form, action) ? null : action);
-      setText("");
+      // Modifier part du texte actuel
+      setText(action.kind === "amend" ? item.observed_result : "");
       captures.clear();
     } else {
       setForm(null);
@@ -93,8 +104,12 @@ export function useCaseAction(item: AcceptanceCase, onDone: (updated: Acceptance
   // Le bouton Enregistrer reste actif : un texte manquant est explique, pas devine.
   const submit = () => {
     if (!form) return;
-    if (!text.trim()) {
+    if (!text.trim() && textRequired(form)) {
       setError(`Renseignez le champ « ${textLabel(form)} ».`);
+      return;
+    }
+    if (form.kind === "amend" && text.trim() === item.observed_result.trim() && !captures.captures.length) {
+      setError("Rien à modifier : changez le texte ou joignez une capture.");
       return;
     }
     send(form, text.trim(), captures.payload);

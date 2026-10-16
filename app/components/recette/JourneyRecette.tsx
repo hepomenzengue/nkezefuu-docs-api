@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { Fragment, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../lib/api";
 import { AWAITING_TONES, STATUS_FILTERS, countCases, formatDate, recetteHref, rowMark } from "../../lib/recette";
 import type { AcceptanceCase, AcceptanceJourney, AcceptanceStep, AcceptanceVersion, CaseLink } from "../../lib/types";
@@ -49,7 +50,28 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [profileFilters, setProfileFilters] = useState<string[]>([]);
   const [includeArchived, setIncludeArchived] = useState(false);
-  const [openCaseId, setOpenCaseId] = useState<number | null>(null);
+  // Fiche du cas ouverte : dans l'adresse (&case=<id>), pour qu'un lien copie l'ouvre
+  // directement et que le bouton Retour du navigateur la ferme.
+  const router = useRouter();
+  const params = useSearchParams();
+  const openCaseId = Number(params.get("case")) || null;
+  const openedHere = useRef(false);
+  const caseHref = (id: number | null) => {
+    const next = new URLSearchParams(params.toString());
+    if (id) next.set("case", String(id));
+    else next.delete("case");
+    return `/recette/?${next.toString()}`;
+  };
+  // Ouverte depuis la page : on revient en arriere, l'historique reste propre. Ouverte
+  // par un lien : on retire seulement le cas de l'adresse.
+  const closeCase = () => {
+    if (openedHere.current) {
+      openedHere.current = false;
+      router.back();
+    } else {
+      router.replace(caseHref(null), { scroll: false });
+    }
+  };
   const [flagStep, setFlagStep] = useState<AcceptanceStep | null>(null);
 
   // Etat deplie de chaque etape, par cle : toutes repliees par defaut, sauf celles que
@@ -250,7 +272,10 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
                 canFlag={!readOnly && isTester && step.cases.some((c) => c.active && c.result.code === "not_tested")}
                 // Le signalement porte sur tous les cas non testes de l'etape, quel que soit le profil filtre
                 onFlag={() => setFlagStep(data.steps.find((s) => s.id === step.id) ?? step)}
-                onOpenCase={setOpenCaseId}
+                caseHref={caseHref}
+                onOpenCase={() => {
+                  openedHere.current = true;
+                }}
                 onCaseChanged={replaceCase}
                 onRegression={() => reload({ quiet: true })}
               />
@@ -260,7 +285,7 @@ export default function JourneyRecette({ code, versionId }: { code: string; vers
       )}
 
       {openCaseId !== null && data && (
-        <CasePanel caseId={openCaseId} steps={data.steps} onClose={() => setOpenCaseId(null)} onChanged={() => reload({ quiet: true })} />
+        <CasePanel caseId={openCaseId} steps={data.steps} onClose={closeCase} onChanged={() => reload({ quiet: true })} />
       )}
 
       {flagStep && (
@@ -330,6 +355,7 @@ function StepSection({
   onToggle,
   canFlag,
   onFlag,
+  caseHref,
   onOpenCase,
   onCaseChanged,
   onRegression,
@@ -339,7 +365,8 @@ function StepSection({
   onToggle: () => void;
   canFlag: boolean;
   onFlag: () => void;
-  onOpenCase: (id: number) => void;
+  caseHref: (id: number) => string;
+  onOpenCase: () => void;
   onCaseChanged: (updated: AcceptanceCase) => void;
   onRegression: () => void;
 }) {
@@ -408,7 +435,8 @@ function StepSection({
                   <CaseRow
                     key={c.id}
                     item={c}
-                    onOpen={() => onOpenCase(c.id)}
+                    href={caseHref(c.id)}
+                    onOpen={onOpenCase}
                     onChanged={onCaseChanged}
                     onRegression={onRegression}
                   />
@@ -434,16 +462,24 @@ export function LinkMention({ link, prefix }: { link: CaseLink; prefix: string }
   );
 }
 
+// Clic simple : la fiche s'ouvre dans la page (un Ctrl+clic l'ouvre dans un autre onglet)
+const isPlainClick = (e: React.MouseEvent) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+
 const ORIGIN_PREFIX: Record<string, string> = { regression: "Régression de", postponed: "Reporté de" };
 const FOLLOWUP_PREFIX: Record<string, string> = { regression: "Régression en", postponed: "Repris en" };
 
+// La fiche s'ouvre par la reference ou par Detail (de vrais liens : clic du milieu ou
+// copie de l'adresse possibles). Le reste de la ligne ne reagit pas au clic, pour
+// pouvoir selectionner son texte.
 function CaseRow({
   item,
+  href,
   onOpen,
   onChanged,
   onRegression,
 }: {
   item: AcceptanceCase;
+  href: string;
   onOpen: () => void;
   onChanged: (updated: AcceptanceCase) => void;
   onRegression: () => void;
@@ -464,14 +500,11 @@ function CaseRow({
 
   return (
     <Fragment>
-      <tr
-        onClick={onOpen}
-        onKeyDown={(e) => e.target === e.currentTarget && (e.key === "Enter" || e.key === " ") && onOpen()}
-        tabIndex={0}
-        className={`cursor-pointer hover:bg-gray-50 focus:bg-accent-soft focus:outline-none ${item.active ? "" : "opacity-60"}`}
-      >
-        <td className={`font-mono text-xs text-accent whitespace-nowrap align-top ${rowMark(item.result.code)}`}>
-          {item.reference}
+      <tr className={`hover:bg-gray-50 ${item.active ? "" : "opacity-60"}`}>
+        <td className={`font-mono text-xs whitespace-nowrap align-top ${rowMark(item.result.code)}`}>
+          <Link href={href} scroll={false} onClick={(e) => isPlainClick(e) && onOpen()} className="text-accent hover:text-accent-ink hover:underline" title="Ouvrir la fiche du cas">
+            {item.reference} ›
+          </Link>
           {!item.active && <span className="block text-faint">archivé</span>}
           {item.origin && <LinkMention link={item.origin} prefix={ORIGIN_PREFIX[item.origin.kind.code] ?? ""} />}
           {item.followups.map((f) => (
@@ -498,8 +531,18 @@ function CaseRow({
           )}
         </td>
         <td className={`align-top whitespace-nowrap text-sm ${AWAITING_TONES[item.awaiting.code] ?? ""}`}>{item.awaiting.label}</td>
-        <td className="align-top cursor-default" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-          {actions.length > 0 && <ActionButtons actions={actions} state={state} vertical />}
+        <td className="align-top">
+          <div className="flex flex-col items-stretch gap-1 min-w-[9rem]">
+            <Link
+              href={href}
+              scroll={false}
+              onClick={(e) => isPlainClick(e) && onOpen()}
+              className="text-xs font-medium text-center rounded-md border border-rule bg-surface px-2 py-1 text-accent hover:bg-accent-soft"
+            >
+              Détail
+            </Link>
+            {actions.length > 0 && <ActionButtons actions={actions} state={state} vertical />}
+          </div>
         </td>
       </tr>
 
